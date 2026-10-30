@@ -1,0 +1,745 @@
+/* ==========================================================================
+   Shield AI — AI Agent Security Shield (DecodeLabs Project 1)
+   Mobile-First Base & Component Stylesheet
+   ========================================================================== */
+
+:root {
+  /* DecodeLabs 2025 Palette */
+  --mocha: #A47864;      /* Stability */
+  --blue: #A0D4E0;       /* Trust */
+  --grey: #F2F0EA;       /* Refinement */
+  --ink: #2A2420;        /* Deep readable text */
+  --mute: #6B625B;       /* Secondary text */
+  --line: #DDD8CE;       /* Subtle warm borders */
+  --card: #FFFDF9;       /* Card background */
+  --side: #2B211C;       /* Dark sidebar */
+  --acc: #2D6A80;        /* Primary action teal */
+  --acc-hover: #225364;  /* Hover state */
+  --ok: #1E7B4B;         /* Verified / Allowed */
+  --warn: #9A6200;       /* Caution / Restricted */
+  --bad: #B3261E;        /* Danger / Blocked */
+  
+  /* Typography: Max 2 font families, 3 weights (400, 600, 800) */
+  --h: "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --b: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* --------------------------------------------------------------------------
+   Reset & Document Base
+   -------------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--b);
+  font-weight: 400;
+  font-size: clamp(0.875rem, 0.4vw + 0.8rem, 1rem);
+  line-height: 1.55;
+  background-color: var(--grey);
+  color: var(--ink);
+  overflow-x: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+body.drawer-open {
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Fluid Typography
+   -------------------------------------------------------------------------- */
+h1, h2, h3 {
+  font-family: var(--h);
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+h1 {
+  font-size: clamp(1.35rem, 2.5vw + 0.9rem, 2.2rem);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: clamp(1.1rem, 1.5vw + 0.75rem, 1.45rem);
+  margin-bottom: 0.6rem;
+}
+
+h3 {
+  font-size: clamp(0.95rem, 0.8vw + 0.75rem, 1.15rem);
+  font-weight: 600;
+}
+
+p, .note {
+  overflow-wrap: break-word;
+}
+
+.note {
+  font-size: clamp(0.8rem, 0.3vw + 0.75rem, 0.875rem);
+  color: var(--mute);
+  line-height: 1.45;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86em;
+  background: rgba(42, 36, 32, 0.06);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* Accessible Focus States */
+:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Responsive Media & Assets */
+img, svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* --------------------------------------------------------------------------
+   Macro Layout (Mobile-First CSS Grid)
+   -------------------------------------------------------------------------- */
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100vw;
+  position: relative;
+}
+
+.content-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+main {
+  flex: 1 0 auto;
+  padding: clamp(0.85rem, 2.5vw, 1.5rem);
+  width: 100%;
+  max-width: 1300px;
+  margin: 0 auto;
+  min-width: 0;
+}
+
+section {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   Navigation Sidebar & Mobile Drawer
+   -------------------------------------------------------------------------- */
+aside {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(290px, 86vw);
+  height: 100vh;
+  height: 100dvh;
+  background: var(--side);
+  color: var(--grey);
+  padding: 1.25rem 1rem;
+  transform: translateX(-100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.3);
+}
+
+aside.open {
+  transform: translateX(0);
+}
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(42, 36, 32, 0.65);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 95;
+}
+
+.drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(221, 216, 206, 0.15);
+}
+
+.brand {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  font-family: var(--h);
+  font-weight: 800;
+  font-size: 1.2rem;
+  color: #FFF;
+}
+
+.drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: #E6DFD3;
+  font-size: 1.3rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.drawer-close:hover {
+  background: #3C2F28;
+  color: #FFF;
+}
+
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+nav button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: #E6DFD3;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background 0.15s, color 0.15s;
+}
+
+nav button:hover,
+nav button:focus-visible {
+  background: #3C2F28;
+  color: #FFF;
+}
+
+nav button[aria-current=page] {
+  background: var(--mocha);
+  color: #FFF;
+  font-weight: 600;
+  box-shadow: inset 4px 0 0 var(--blue);
+}
+
+/* --------------------------------------------------------------------------
+   Header (Top Bar)
+   -------------------------------------------------------------------------- */
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.75rem clamp(0.75rem, 2vw, 1.25rem);
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.top-brand-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+#pname {
+  font-family: var(--h);
+  font-weight: 800;
+  font-size: clamp(1rem, 1.8vw, 1.15rem);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.env-badges {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 620px) {
+  .top {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand bell"
+      "badges badges";
+    gap: 0.45rem;
+    padding: 0.6rem clamp(0.75rem, 2vw, 1rem);
+  }
+
+  .top-brand-group {
+    grid-area: brand;
+  }
+
+  #bell {
+    grid-area: bell;
+  }
+
+  .env-badges {
+    grid-area: badges;
+    justify-content: flex-start;
+  }
+}
+
+.badge {
+  font-family: var(--h);
+  font-weight: 600;
+  font-size: clamp(0.68rem, 0.4vw + 0.62rem, 0.76rem);
+  padding: 0.22rem 0.55rem;
+  border-radius: 99px;
+  border: 1px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.ok   { color: var(--ok); }
+.warn { color: var(--warn); }
+.bad  { color: var(--bad); }
+.info { color: var(--acc); }
+
+/* --------------------------------------------------------------------------
+   Buttons & Interactive Elements
+   -------------------------------------------------------------------------- */
+.btn {
+  font-family: var(--h);
+  font-weight: 600;
+  font-size: clamp(0.85rem, 0.3vw + 0.8rem, 0.92rem);
+  background: var(--acc);
+  color: #FFF;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  text-decoration: none;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.btn:hover {
+  background: var(--acc-hover);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn.alt {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.btn.alt:hover {
+  background: rgba(164, 120, 100, 0.09);
+  border-color: var(--mocha);
+}
+
+.btn.sm {
+  min-height: 38px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.84rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0.6rem 0;
+}
+
+/* --------------------------------------------------------------------------
+   Cards & Layout Grids (Mobile-First)
+   -------------------------------------------------------------------------- */
+.grid {
+  display: grid;
+  gap: clamp(0.75rem, 1.8vw, 1rem);
+  grid-template-columns: 1fr;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: clamp(0.9rem, 2vw, 1.25rem);
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-shadow: 0 1px 3px rgba(42, 36, 32, 0.04);
+}
+
+.kpi {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 110px;
+}
+
+.kpi h3 {
+  font-size: 0.88rem;
+  color: var(--mute);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.kpi b {
+  display: block;
+  font-family: var(--h);
+  font-weight: 800;
+  font-size: clamp(1.6rem, 5cqw + 1.2rem, 2.3rem);
+  color: var(--ink);
+  line-height: 1.1;
+  margin: 0.35rem 0;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Tables with Contained Scrolling
+   -------------------------------------------------------------------------- */
+.wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0.6rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  position: relative;
+  scrollbar-width: thin;
+}
+
+.wrap::-webkit-scrollbar {
+  height: 6px;
+}
+
+.wrap::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  min-width: 580px;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+th:first-child, td:first-child {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+th {
+  background: #FAF7F2;
+  font-family: var(--h);
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--mute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr[data-id] {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+tbody tr[data-id]:hover,
+tbody tr[data-id]:focus-visible {
+  background: rgba(164, 120, 100, 0.12);
+}
+
+.table-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Forms & Controls
+   -------------------------------------------------------------------------- */
+textarea, input, select {
+  font: inherit;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  min-height: 44px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px rgba(160, 212, 224, 0.35);
+  outline: none;
+}
+
+label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.sw {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.2rem 0;
+}
+
+.sw input[type=checkbox] {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  accent-color: var(--acc);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sw label {
+  margin-bottom: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Data Visualizations & Workflow Stages
+   -------------------------------------------------------------------------- */
+.bar {
+  height: 100%;
+  border-radius: 99px;
+  background: currentColor;
+  transition: width 0.3s ease;
+}
+
+.rb {
+  display: grid;
+  grid-template-columns: 75px 1fr 32px;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.5rem 0;
+  font-size: 0.88rem;
+}
+
+.rb div {
+  background: var(--line);
+  border-radius: 99px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.flow {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr;
+  counter-reset: s;
+}
+
+.flow li {
+  list-style: none;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.88rem;
+  counter-increment: s;
+  background: #FAF8F5;
+  transition: all 0.2s;
+  word-break: break-word;
+}
+
+.flow li::before {
+  content: counter(s) ". ";
+  font-weight: 800;
+  font-family: var(--h);
+  color: var(--acc);
+  margin-right: 0.3rem;
+}
+
+.flow li.on {
+  border-color: var(--acc);
+  background: rgba(160, 212, 224, 0.22);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--acc);
+}
+
+.res {
+  border-left: 6px solid currentColor;
+}
+
+#chart {
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+  display: block;
+}
+
+/* --------------------------------------------------------------------------
+   Modals, Toasts & Footer
+   -------------------------------------------------------------------------- */
+dialog {
+  max-width: min(92vw, 560px);
+  width: 100%;
+  max-height: 88vh;
+  max-height: 88dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--ink);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+}
+
+dialog::backdrop {
+  background: rgba(42, 36, 32, 0.65);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+dialog h2 {
+  margin-top: 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+#db {
+  margin: 1rem 0;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+#db p {
+  margin: 0.5rem 0;
+}
+
+#toast {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  left: 1.25rem;
+  max-width: 400px;
+  margin: 0 auto;
+  background: var(--side);
+  color: #FFF;
+  padding: 0.85rem 1.2rem;
+  border-radius: 10px;
+  z-index: 200;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  font-size: 0.9rem;
+}
+
+.site-footer {
+  padding: 1.25rem clamp(0.85rem, 2.5vw, 1.5rem);
+  border-top: 1px solid var(--line);
+  background: var(--card);
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--mute);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Reduced Motion Preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
