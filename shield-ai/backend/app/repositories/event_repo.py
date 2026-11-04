@@ -115,3 +115,8 @@ class SecurityEventRepository:
         db.refresh(event)
         return event
 
+    @staticmethod
+    def delete(db: Session, event: SecurityEvent) -> None:
+        db.delete(event)
+        db.commit()
+

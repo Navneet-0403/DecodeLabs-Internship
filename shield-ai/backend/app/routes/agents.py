@@ -89,6 +89,11 @@ def update_agent(agent_id: str, agent_in: AgentUpdate, db: Session = Depends(get
     updated = AgentRepository.update(db, agent, agent_in)
     return agent_to_response(updated, db)
 
+@router.patch("/{agent_id}", response_model=AgentResponse)
+def patch_agent(agent_id: str, agent_in: AgentUpdate, db: Session = Depends(get_db)):
+    """Partially update agent fields via HTTP PATCH."""
+    return update_agent(agent_id, agent_in, db)
+
 @router.delete("/{agent_id}", response_model=AgentResponse)
 def delete_agent(agent_id: str, db: Session = Depends(get_db)):
     """Soft-deletes / deactivates an agent safely, preserving audit history."""

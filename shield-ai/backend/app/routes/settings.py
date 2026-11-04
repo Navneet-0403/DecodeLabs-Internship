@@ -33,6 +33,19 @@ def update_settings(request: SettingsUpdateRequest, db: Session = Depends(get_db
         updated_at=updated.updated_at
     )
 
+@router.patch("", response_model=SettingsResponse)
+def patch_settings(request: SettingsUpdateRequest, db: Session = Depends(get_db)):
+    """Partially update gateway configuration thresholds via HTTP PATCH."""
+    updated = SettingsRepository.update(db, request)
+    return SettingsResponse(
+        risk_sensitivity=updated.risk_sensitivity,
+        automatic_critical_blocking=updated.automatic_critical_blocking,
+        require_high_risk_approval=updated.require_high_risk_approval,
+        mask_sensitive_data=updated.mask_sensitive_data,
+        notifications_enabled=updated.notifications_enabled,
+        updated_at=updated.updated_at
+    )
+
 demo_router = APIRouter(prefix="/api/demo", tags=["Demo Management"])
 
 @demo_router.post("/reset")

@@ -185,3 +185,98 @@ def test_gatekeeper_error_handling_and_status_codes(client: TestClient):
     resp_no_event = client.get("/api/events/EV-99999")
     assert resp_no_event.status_code == 404
     assert resp_no_event.json()["error"]["code"] == "EVENT_NOT_FOUND"
+
+
+def test_rest_all_five_http_methods(client: TestClient):
+    """
+    Verify complete REST API Method Support:
+    GET, POST, PUT, PATCH, and DELETE (including HTTP 204 No Content with empty body).
+    """
+    # 1. GET - Retrieve resources
+    get_tools_resp = client.get("/api/tools")
+    assert get_tools_resp.status_code == 200
+    tools = get_tools_resp.json()
+    assert len(tools) > 0
+    test_tool_id = tools[0]["tool_id"]
+
+    # 2. POST - Create / Execute resource
+    scan_resp = client.post("/api/scans", json={"prompt": "Check system status for user alice"})
+    assert scan_resp.status_code == 200
+    assert "decision" in scan_resp.json()
+
+    # 3. PUT - Full / direct replacement of resource state
+    put_resp = client.put(f"/api/tools/{test_tool_id}", json={"permission_status": "Blocked"})
+    assert put_resp.status_code == 200
+    assert put_resp.json()["permission_status"] == "Blocked"
+
+    # 4. PATCH - Partial modification of resource state
+    patch_resp = client.patch(f"/api/tools/{test_tool_id}", json={"permission_status": "Allowed"})
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["permission_status"] == "Allowed"
+
+    # 5. DELETE - Remove resource returning HTTP 204 No Content with empty body
+    # Create an event first to delete
+    scan_for_del = client.post("/api/scans", json={"prompt": "Temporary probe to delete"}).json()
+    events_resp = client.get("/api/events?limit=1").json()
+    event_to_delete = events_resp["events"][0]["event_id"]
+
+    del_resp = client.delete(f"/api/events/{event_to_delete}/purge")
+    assert del_resp.status_code == 204
+    assert del_resp.text == ""  # True empty body (HTTP 204 No Content)
+
+    # Verify event was purged
+    recheck_resp = client.get(f"/api/events/{event_to_delete}")
+    assert recheck_resp.status_code == 404
+
+
+def test_patch_partial_updates_and_cors_preflight(client: TestClient):
+    """
+    Verify PATCH partial updates on settings, agents, and approvals,
+    as well as CORS preflight allowing PATCH.
+    """
+    # 1. CORS Preflight OPTIONS for PATCH
+    preflight = client.options(
+        "/api/settings",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Headers": "content-type",
+        }
+    )
+    assert preflight.status_code == 200
+    assert "PATCH" in preflight.headers.get("access-control-allow-methods", "")
+
+    # 2. PATCH Settings (partial update only touching notifications_enabled)
+    patch_settings_resp = client.patch("/api/settings", json={"notifications_enabled": False})
+    assert patch_settings_resp.status_code == 200
+    settings_data = patch_settings_resp.json()
+    assert settings_data["notifications_enabled"] is False
+    # Ensure other settings were NOT reset to null or zeros
+    assert settings_data["risk_sensitivity"] == 1.0
+    assert settings_data["automatic_critical_blocking"] is True
+
+    # 3. PATCH Agent (partial update touching status)
+    agents = client.get("/api/agents").json()
+    agent_id = agents[0]["agent_id"]
+    patch_agent_resp = client.patch(f"/api/agents/{agent_id}", json={"status": "Suspended"})
+    assert patch_agent_resp.status_code == 200
+    assert patch_agent_resp.json()["status"] == "Suspended"
+
+    # Restore agent
+    client.patch(f"/api/agents/{agent_id}", json={"status": "Active"})
+
+
+def test_malformed_json_handling(client: TestClient):
+    """
+    Verify robust handling of invalid JSON payloads returning HTTP 400
+    with standard Gatekeeper error format instead of unhandled 500 crashes.
+    """
+    bad_json_resp = client.post(
+        "/api/scans",
+        content=b"{malformed json input:",
+        headers={"Content-Type": "application/json"}
+    )
+    assert bad_json_resp.status_code == 400
+    err_body = bad_json_resp.json()
+    assert "error" in err_body
+    assert err_body["error"]["code"] == "INVALID_INPUT"

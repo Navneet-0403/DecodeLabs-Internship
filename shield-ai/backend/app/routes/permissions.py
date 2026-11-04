@@ -83,6 +83,11 @@ def update_tool_permission(tool_id: str, request: ToolUpdateRequest, db: Session
     tool = ToolRepository.get_by_id(db, tool.id)
     return format_tool_response(tool, db)
 
+@router.patch("/{tool_id}", response_model=ToolResponse)
+def patch_tool_permission(tool_id: str, request: ToolUpdateRequest, db: Session = Depends(get_db)):
+    """Partially update tool permission status via HTTP PATCH."""
+    return update_tool_permission(tool_id, request, db)
+
 @router.post("/reset", response_model=List[ToolResponse])
 def reset_tools(db: Session = Depends(get_db)):
     """Restore default tool permissions."""

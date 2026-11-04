@@ -637,6 +637,8 @@ function fillCategoriesDropdown() {
   `).join("");
 }
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 /* --------------------------------------------------------------------------
    Module 7: Attack Simulator (POST /api/simulations)
    -------------------------------------------------------------------------- */
@@ -653,47 +655,44 @@ async function runSim() {
     srEl.innerHTML = '<p class="loading-indicator">Simulating multi-stage attack & evaluating backend security policy…</p>';
   }
 
-  // Progressive visual workflow progression
-  let stageIdx = 0;
-  function stepFlow() {
-    flow(ul, stageIdx);
-    if (stageIdx < STAGES.length - 1) {
-      stageIdx++;
-      setTimeout(stepFlow, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 150);
-    }
-  }
-  stepFlow();
-
   try {
-    const res = await API.runSimulation(scIdx);
+    // Initiate backend API request concurrently with visual step progression
+    const simPromise = API.runSimulation(scIdx);
 
-    // Ensure full animation completes before rendering final response
-    setTimeout(() => {
-      flow(ul, STAGES.length - 1);
-      const decClass = dcl(res.decision);
-      if (srEl) {
-        srEl.className = "card res " + decClass;
-        srEl.innerHTML = `
-          <h2>${res.decision === "Allowed" ? "ALLOWED" : res.decision === "Blocked" ? "BLOCKED" : "APPROVAL REQUIRED"}</h2>
-          <p><strong>Scenario:</strong> ${esc(res.scenario_title)}</p>
-          <p><strong>Detection:</strong> ${esc(res.classification)} (${res.detected_indicators && res.detected_indicators.length ? res.detected_indicators.map(esc).join(", ") : "no indicators"})</p>
-          <p><strong>Composite risk score:</strong> ${res.risk_score}/100 (${esc(res.risk_level)})</p>
-          <p><strong>Tool interception:</strong> “${esc(res.tool_name)}” policy status is <em>${esc(res.tool_permission)}</em>.</p>
-          <p><strong>Policy explanation:</strong> ${esc(res.explanation)}</p>
-          ${res.approval_created ? `<p><strong>Approval queue:</strong> Created review record <code>${esc(res.approval_created)}</code></p>` : ""}
-          <p class="note" style="margin-top:.5rem">Logged to audit record <code>${esc(res.event_code || res.event_id)}</code></p>
-        `;
+    const isReduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    for (let i = 0; i < STAGES.length; i++) {
+      flow(ul, i);
+      if (!isReduced && i < STAGES.length - 1) {
+        await sleep(150);
       }
-      toast(`Simulation completed: ${res.decision}`);
-      Promise.allSettled([loadDashboard(), loadApprovals(), loadLogs()]);
-      if (runBtn) runBtn.disabled = false;
-    }, 1200);
+    }
+
+    const res = await simPromise;
+    flow(ul, STAGES.length - 1);
+
+    const decClass = dcl(res.decision);
+    if (srEl) {
+      srEl.className = "card res " + decClass;
+      srEl.innerHTML = `
+        <h2>${res.decision === "Allowed" ? "ALLOWED" : res.decision === "Blocked" ? "BLOCKED" : "APPROVAL REQUIRED"}</h2>
+        <p><strong>Scenario:</strong> ${esc(res.scenario_title)}</p>
+        <p><strong>Detection:</strong> ${esc(res.classification)} (${res.detected_indicators && res.detected_indicators.length ? res.detected_indicators.map(esc).join(", ") : "no indicators"})</p>
+        <p><strong>Composite risk score:</strong> ${res.risk_score}/100 (${esc(res.risk_level)})</p>
+        <p><strong>Tool interception:</strong> “${esc(res.tool_name)}” policy status is <em>${esc(res.tool_permission)}</em>.</p>
+        <p><strong>Policy explanation:</strong> ${esc(res.explanation)}</p>
+        ${res.approval_created ? `<p><strong>Approval queue:</strong> Created review record <code>${esc(res.approval_created)}</code></p>` : ""}
+        <p class="note" style="margin-top:.5rem">Logged to audit record <code>${esc(res.event_code || res.event_id)}</code></p>
+      `;
+    }
+    toast(`Simulation completed: ${res.decision}`);
+    Promise.allSettled([loadDashboard(), loadApprovals(), loadLogs()]);
   } catch (err) {
     console.error("Simulation error:", err);
     if (srEl) {
       srEl.className = "card res bad";
       srEl.innerHTML = `<h3>Simulation Failed</h3><p class="bad">${esc(err.message)}</p>`;
     }
+  } finally {
     if (runBtn) runBtn.disabled = false;
   }
 }

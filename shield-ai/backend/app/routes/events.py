@@ -80,3 +80,12 @@ def archive_event(event_id: str, db: Session = Depends(get_db)):
         raise APIException(status_code=404, code="EVENT_NOT_FOUND", message=f"Security event with ID '{event_id}' was not found.")
     archived = SecurityEventRepository.soft_delete(db, event)
     return format_event_response(archived)
+
+@router.delete("/{event_id}/purge", status_code=status.HTTP_204_NO_CONTENT)
+def purge_event(event_id: str, db: Session = Depends(get_db)):
+    """Permanently delete an event, returning HTTP 204 No Content with an empty body."""
+    event = SecurityEventRepository.get_by_identifier(db, event_id)
+    if not event:
+        raise APIException(status_code=404, code="EVENT_NOT_FOUND", message=f"Security event with ID '{event_id}' was not found.")
+    SecurityEventRepository.delete(db, event)
+    return None

@@ -68,6 +68,11 @@ def update_approval(approval_id: str, update_in: ApprovalUpdate, db: Session = D
     updated = ApprovalRepository.update(db, appr, update_in)
     return format_approval_response(updated, db)
 
+@router.patch("/{approval_id}", response_model=ApprovalResponse)
+def patch_approval(approval_id: str, update_in: ApprovalUpdate, db: Session = Depends(get_db)):
+    """Partially update an approval request via HTTP PATCH."""
+    return update_approval(approval_id, update_in, db)
+
 @router.delete("/{approval_id}", response_model=ApprovalResponse)
 def cancel_approval(approval_id: str, db: Session = Depends(get_db)):
     """Cancel an eligible pending approval request safely."""
