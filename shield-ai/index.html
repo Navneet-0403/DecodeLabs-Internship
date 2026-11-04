@@ -41,7 +41,7 @@
 
 <section id="v-overview">
   <h1>Security Command Center</h1>
-  <p class="note" style="margin:.4rem 0 .8rem">Monitor AI agent activity, inspect suspicious instructions, and control proposed actions from one centralized security workspace. All figures are seeded demo data.</p>
+  <p class="note" style="margin:.4rem 0 .8rem">Monitor AI agent activity, inspect suspicious instructions, and control proposed actions from one centralized security workspace. Real-time security telemetry and audited event figures backed by SQLite.</p>
   <div class="row">
     <button class="btn" data-go="scanner">Scan a Prompt</button>
     <button class="btn alt" data-go="logs">View Threat Activity</button>
@@ -112,7 +112,7 @@
 
 <section id="v-perms" hidden>
   <h1>Tool Permissions</h1>
-  <p class="note" style="margin:.4rem 0 .8rem">Agents propose; policy decides. These toggles change local demo state only and do not enforce real server-side access control.</p>
+  <p class="note" style="margin:.4rem 0 .8rem">Agents propose; policy decides. Granular least-privilege permissions enforced server-side and persisted in SQLite.</p>
   <article class="card" style="margin-top:.8rem">
     <h2>Policy switches</h2>
     <div id="pol"></div>
@@ -174,7 +174,7 @@
 
 <section id="v-sim" hidden>
   <h1>Attack Simulator</h1>
-  <p class="note" style="margin:.4rem 0 .8rem">Test policy enforcement against simulated threat vectors. Every scenario is evaluated locally in the browser.</p>
+  <p class="note" style="margin:.4rem 0 .8rem">Test policy enforcement against simulated threat vectors. Scenarios are evaluated server-side through FastAPI policy hierarchy.</p>
   <div class="grid g2" style="margin-top:.8rem">
     <article class="card">
       <label for="sc">Scenario</label>
@@ -191,7 +191,7 @@
 
 <section id="v-set" hidden>
   <h1>Settings</h1>
-  <p class="note" style="margin:.4rem 0 .8rem">Local demo preferences and threshold configuration. These adjust frontend demo behaviour only.</p>
+  <p class="note" style="margin:.4rem 0 .8rem">Gateway security policy preferences and sensitivity thresholds persisted in the relational database.</p>
   <article class="card" style="margin-top:.8rem">
     <label for="sens">Risk sensitivity threshold</label>
     <select id="sens">

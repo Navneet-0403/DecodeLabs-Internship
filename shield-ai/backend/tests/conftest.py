@@ -12,7 +12,7 @@ os.environ["SHIELD_AI_DB_PATH"] = str(_test_db_path)
 
 from backend.app.database import init_db, reset_demo_events_and_approvals, reset_tool_permissions, get_session_factory
 from backend.app.database.connection import dispose_engine
-from backend.app.models import Agent, Tool
+from backend.app.models import Agent, Tool, ApplicationSettings
 from backend.app.main import app
 
 # Initialize test database schema and seeds
@@ -36,7 +36,7 @@ def ensure_clean_test_db():
     reset_demo_events_and_approvals()
     reset_tool_permissions()
 
-    # Clean up any ephemeral agents or tools created by previous CRUD tests
+    # Clean up any ephemeral agents or tools created by previous CRUD tests and restore default settings
     session_factory = get_session_factory()
     with session_factory() as db:
         initial_agent_codes = {"agent-1", "agent-2", "agent-3", "agent-4"}
@@ -45,6 +45,13 @@ def ensure_clean_test_db():
         db.query(Agent).filter(Agent.agent_code.in_(initial_agent_codes)).update({Agent.is_active: True}, synchronize_session=False)
         db.query(Tool).filter(Tool.tool_code.notin_(initial_tool_codes)).delete(synchronize_session=False)
         db.query(Tool).filter(Tool.tool_code.in_(initial_tool_codes)).update({Tool.is_active: True}, synchronize_session=False)
+        db.query(ApplicationSettings).filter(ApplicationSettings.id == 1).update({
+            ApplicationSettings.risk_sensitivity: 1.0,
+            ApplicationSettings.automatic_critical_blocking: True,
+            ApplicationSettings.require_high_risk_approval: True,
+            ApplicationSettings.mask_sensitive_data: True,
+            ApplicationSettings.notifications_enabled: True
+        }, synchronize_session=False)
         db.commit()
 
     yield
