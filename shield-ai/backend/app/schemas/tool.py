@@ -69,3 +69,4 @@ class ToolUpdateRequest(BaseModel):
         if v not in VALID_TOOL_PERMISSIONS:
             raise ValueError(f"Invalid permission status '{v}'. Allowed: {', '.join(sorted(VALID_TOOL_PERMISSIONS))}")
         return v
+

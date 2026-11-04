@@ -114,3 +114,4 @@ class SecurityEventRepository:
         db.commit()
         db.refresh(event)
         return event
+

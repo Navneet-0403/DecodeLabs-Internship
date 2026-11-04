@@ -14,3 +14,4 @@ class HealthResponse(BaseModel):
     application: str
     api_version: str
     database: str
+

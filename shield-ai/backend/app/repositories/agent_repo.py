@@ -98,3 +98,4 @@ class AgentRepository:
         db.commit()
         db.refresh(agent)
         return agent
+

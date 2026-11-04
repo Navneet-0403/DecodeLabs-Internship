@@ -20,3 +20,4 @@ class AgentTool(Base):
     # Relationships
     agent = relationship("Agent", back_populates="agent_tools")
     tool = relationship("Tool", back_populates="agent_tools")
+

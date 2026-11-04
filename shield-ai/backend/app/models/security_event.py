@@ -29,3 +29,4 @@ class SecurityEvent(Base):
     agent = relationship("Agent", back_populates="security_events")
     tool = relationship("Tool", back_populates="security_events")
     approval_requests = relationship("ApprovalRequest", back_populates="security_event")
+

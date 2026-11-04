@@ -49,3 +49,4 @@ def delete_tool(tool_id: str, db: Session = Depends(get_db)):
         raise APIException(status_code=404, code="TOOL_NOT_FOUND", message=f"Tool '{tool_id}' was not found.")
     deactivated = ToolRepository.soft_delete(db, tool)
     return deactivated
+

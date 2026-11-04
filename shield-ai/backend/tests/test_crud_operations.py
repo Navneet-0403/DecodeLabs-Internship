@@ -167,3 +167,4 @@ def test_approval_request_crud(client):
     del_res = client.delete(f"/api/approvals/{appr_code}")
     assert del_res.status_code == 200
     assert del_res.json()["status"] == "Cancelled"
+

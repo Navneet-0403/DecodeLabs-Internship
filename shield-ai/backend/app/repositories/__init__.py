@@ -13,3 +13,4 @@ __all__ = [
     "ApprovalRepository",
     "SettingsRepository",
 ]
+

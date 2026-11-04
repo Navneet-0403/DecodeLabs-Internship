@@ -24,3 +24,4 @@ class SettingsUpdateRequest(BaseModel):
         if v is not None and (v < 0.1 or v > 5.0):
             raise ValueError("risk_sensitivity must be between 0.1 and 5.0")
         return v
+

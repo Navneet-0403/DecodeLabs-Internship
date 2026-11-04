@@ -15,3 +15,4 @@ class ApplicationSettings(Base):
     __table_args__ = (
         CheckConstraint("risk_sensitivity >= 0.1 AND risk_sensitivity <= 5.0", name="ck_settings_sensitivity"),
     )
+

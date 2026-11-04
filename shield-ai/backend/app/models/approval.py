@@ -26,3 +26,4 @@ class ApprovalRequest(Base):
     agent = relationship("Agent", back_populates="approval_requests")
     tool = relationship("Tool", back_populates="approval_requests")
     security_event = relationship("SecurityEvent", back_populates="approval_requests")
+

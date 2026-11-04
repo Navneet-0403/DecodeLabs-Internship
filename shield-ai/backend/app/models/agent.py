@@ -20,3 +20,4 @@ class Agent(Base):
     tools = relationship("Tool", secondary="agent_tools", back_populates="agents", viewonly=True)
     security_events = relationship("SecurityEvent", back_populates="agent")
     approval_requests = relationship("ApprovalRequest", back_populates="agent")
+

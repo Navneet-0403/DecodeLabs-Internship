@@ -37,3 +37,4 @@ def test_sql_injection_in_data_creation(client):
     get_res = client.get("/api/agents/agent-sqli-test")
     assert get_res.status_code == 200
     assert get_res.json()["agent_name"] == injection_name
+

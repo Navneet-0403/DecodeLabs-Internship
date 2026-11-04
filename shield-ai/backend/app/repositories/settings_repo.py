@@ -39,3 +39,4 @@ class SettingsRepository:
         db.commit()
         db.refresh(settings)
         return settings
+

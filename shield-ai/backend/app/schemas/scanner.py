@@ -23,3 +23,4 @@ class ScanResponse(BaseModel):
     decision: str
     explanation: str
     remediation: str
+

@@ -47,3 +47,4 @@ class AgentActivityResponse(BaseModel):
     tool_permission: str
     decision: str
     workflow_stages: List[str]
+

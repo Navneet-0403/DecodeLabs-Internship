@@ -286,3 +286,4 @@ def migrate_and_init_db():
             raw_conn.commit()
 
     print("[MIGRATION] Schema migration & initial seed verification completed successfully.")
+

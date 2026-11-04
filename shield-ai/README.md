@@ -30,11 +30,11 @@ pip install -r backend/requirements.txt
 ```
 
 ### Step 3: Run Alembic Database Migrations
-The database schema can be created or updated using Alembic migrations:
+The database schema is managed through Alembic migrations:
 ```powershell
 alembic upgrade head
 ```
-*(Note: The application also verifies and initializes tables automatically upon startup via SQLAlchemy declarative metadata and idempotent migration routines).*
+*(Note: When the application starts, it also verifies and ensures schema initialization automatically).*
 
 ### Step 4: Run the Application
 ```powershell
@@ -61,16 +61,16 @@ DecodeLabs Project 3 establishes the four foundational pillars of enterprise dat
 │ (Schema & Design)│  (ORM & Drivers) │  (CRUD & HTTP)   │  (Integrity)  │
 ├──────────────────┼──────────────────┼──────────────────┼───────────────┤
 │ • Normalized 3NF │ • SQLAlchemy 2.0 │ • POST -> INSERT │ • Foreign Keys│
-│ • 6 Core Tables  │ • SessionFactory │ • GET  -> SELECT │ • CHECK rules │
-│ • 1:M & M:M Rel. │ • Engine Pooling │ • PUT  -> UPDATE │ • Param Queries│
-│ • Alembic Migr.  │ • PRAGMA FK Enfc │ • DEL  -> DELETE │ • ORM Typing  │
+│ • 6 Core Tables  │ • Shared Engine  │ • GET  -> SELECT │ • CHECK rules │
+│ • 1:M & M:M Rel. │ • SessionFactory │ • PUT  -> UPDATE │ • Param Binds │
+│ • Alembic Migr.  │ • PRAGMA FK Enfc │ • DEL  -> DELETE │ • Pydantic V2 │
 └──────────────────┴──────────────────┴──────────────────┴───────────────┘
 ```
 
 1. **Blueprint (Schema and Design)**: Strict relational schema normalized to 3NF, modeling AI agents, tool catalogs, authorization mappings, security audits, approval queues, and application policies.
-2. **Bridge (Integration and Connection)**: SQLAlchemy 2.0 ORM serving as the modern abstraction layer over SQLite, complete with session management, connection pooling, and connection listeners enforcing SQLite foreign key constraints (`PRAGMA foreign_keys=ON;`).
+2. **Bridge (Integration and Connection)**: Centralized SQLAlchemy 2.0 ORM abstraction with a singleton engine and reusable session factory, avoiding per-request engine overhead while enforcing SQLite foreign keys (`PRAGMA foreign_keys=ON;`) across all connections.
 3. **Action (CRUD and RESTful HTTP)**: Every relational entity maps standard REST verbs directly to relational SQL operations with proper HTTP status codes (`200 OK`, `201 Created`, `204 No Content`, `400 Bad Request`, `404 Not Found`, `409 Conflict`).
-4. **Shield (Integrity and Security)**: Database-level domain integrity via NOT NULL, UNIQUE, and CHECK constraints (e.g., risk score 0–100, sensitivity 0.1–5.0), referential cascading, and 100% defense against SQL Injection via bound parameterized statements.
+4. **Shield (Integrity and Security)**: Database-level domain integrity via NOT NULL, UNIQUE, and CHECK constraints (e.g., risk score 0–100, sensitivity 0.1–5.0), referential cascading, and defense against SQL injection via parameterized queries.
 
 ---
 
@@ -106,87 +106,162 @@ erDiagram
     TOOLS ||--o{ AGENT_TOOLS : "assigned to"
     AGENTS ||--o{ APPROVAL_REQUESTS : "initiates"
     TOOLS ||--o{ APPROVAL_REQUESTS : "targets"
+    SECURITY_EVENTS ||--o{ APPROVAL_REQUESTS : "associated with"
     AGENTS ||--o{ SECURITY_EVENTS : "triggers"
     TOOLS ||--o{ SECURITY_EVENTS : "involved in"
 
     AGENTS {
-        string id PK "e.g. agent-1"
+        int id PK "autoincrement"
+        string agent_code "NOT NULL, UNIQUE, index"
         string name "NOT NULL"
-        string role "NOT NULL"
-        string system_prompt "NOT NULL"
-        string model "NOT NULL"
-        string status "Active|Idle|Suspended"
-        integer total_actions "DEFAULT 0"
-        integer blocked_actions "DEFAULT 0"
+        string agent_type "NOT NULL"
+        string status "NOT NULL"
+        string description "Nullable"
         string created_at "ISO-8601"
         string updated_at "ISO-8601"
+        bool is_active "DEFAULT 1"
     }
 
     TOOLS {
-        string id PK "e.g. tool-1"
-        string name "NOT NULL, UNIQUE"
-        string description "NOT NULL"
-        string category "NOT NULL"
+        int id PK "autoincrement"
+        string tool_code "NOT NULL, UNIQUE, index"
+        string name "NOT NULL"
+        string description "Nullable"
         string risk_level "CHECK Low|Medium|High|Critical"
-        integer requires_approval "DEFAULT 0"
+        bool is_active "DEFAULT 1"
         string created_at "ISO-8601"
         string updated_at "ISO-8601"
     }
 
     AGENT_TOOLS {
-        integer id PK "AUTOINCREMENT"
-        string agent_id FK "REFERENCES agents(id) ON DELETE CASCADE"
-        string tool_id FK "REFERENCES tools(id) ON DELETE CASCADE"
+        int id PK "autoincrement"
+        int agent_id FK "REFERENCES agents(id) ON DELETE CASCADE"
+        int tool_id FK "REFERENCES tools(id) ON DELETE CASCADE"
         string permission_status "CHECK Allowed|Approval Required|Restricted|Blocked"
+        string created_at "ISO-8601"
         string updated_at "ISO-8601"
     }
 
     SECURITY_EVENTS {
-        integer id PK "AUTOINCREMENT"
-        string event_id "UNIQUE, NOT NULL"
+        int id PK "autoincrement"
+        string event_code "NOT NULL, UNIQUE, index"
+        int agent_id FK "REFERENCES agents(id) ON DELETE SET NULL"
+        int tool_id FK "REFERENCES tools(id) ON DELETE SET NULL"
         string category "NOT NULL"
         string source "NOT NULL"
-        string agent_id FK "REFERENCES agents(id) ON DELETE SET NULL"
-        string tool_id FK "REFERENCES tools(id) ON DELETE SET NULL"
+        int risk_score "CHECK 0 <= risk_score <= 100"
         string risk_level "CHECK Low|Medium|High|Critical"
-        integer risk_score "CHECK 0 <= risk_score <= 100"
-        string decision "CHECK Allowed|Approval required|Blocked"
-        string explanation "NOT NULL"
-        string event_source "seed|application"
-        string created_at "ISO-8601"
+        string decision "CHECK Allowed|Approval required|Approval Required|Blocked"
+        text explanation "NOT NULL"
+        string event_source "DEFAULT 'application'"
+        string created_at "NOT NULL, index"
+        bool is_archived "DEFAULT 0"
     }
 
     APPROVAL_REQUESTS {
-        integer id PK "AUTOINCREMENT"
-        string approval_id "UNIQUE, NOT NULL"
-        string agent_id FK "REFERENCES agents(id) ON DELETE CASCADE"
-        string tool_id FK "REFERENCES tools(id) ON DELETE SET NULL"
-        string agent_name "NOT NULL"
+        int id PK "autoincrement"
+        string approval_code "NOT NULL, UNIQUE, index"
+        int agent_id FK "REFERENCES agents(id) ON DELETE SET NULL"
+        int tool_id FK "REFERENCES tools(id) ON DELETE SET NULL"
+        int event_id FK "REFERENCES security_events(id) ON DELETE SET NULL"
         string operation "NOT NULL"
         string risk_level "CHECK Low|Medium|High|Critical"
         string reason "NOT NULL"
-        string status "CHECK Pending|Approved|Rejected"
+        string status "CHECK Pending|Approved|Rejected|Cancelled"
         string created_at "ISO-8601"
         string updated_at "ISO-8601"
     }
 
     APPLICATION_SETTINGS {
-        integer id PK "Always 1 (Singleton)"
+        int id PK "Singleton = 1"
         float risk_sensitivity "CHECK 0.1 <= risk_sensitivity <= 5.0"
-        integer automatic_critical_blocking "0 or 1"
-        integer require_high_risk_approval "0 or 1"
-        integer mask_sensitive_data "0 or 1"
-        integer notifications_enabled "0 or 1"
+        bool automatic_critical_blocking "DEFAULT 1"
+        bool require_high_risk_approval "DEFAULT 1"
+        bool mask_sensitive_data "DEFAULT 1"
+        bool notifications_enabled "DEFAULT 1"
         string updated_at "ISO-8601"
     }
 ```
 
-### 1:1 Relationship Architectural Analysis
-In relational architecture, **One-to-One (1:1)** relationships occur when exactly one record in Table A relates to at most one record in Table B (enforced by a `UNIQUE` foreign key). 
-In Shield AI, core agent attributes and settings are stored directly in their respective tables to avoid unnecessary join overhead. An artificial 1:1 table was intentionally not forced. However, in enterprise extensions, a natural 1:1 relationship would model an `AgentSecurityProfile` or `AgentCredentialVault` linked to `agents(id)`:
-```
-agents (1) ── (1) agent_security_profiles (holds hardware enclave keys & cryptographic identity)
-```
+### Table Specifications & Attribute Mappings
+
+#### 1. `agents` (Primary Key: `Integer` autoincrement)
+- `id`: `INTEGER PRIMARY KEY AUTOINCREMENT`
+- `agent_code`: `VARCHAR(50) UNIQUE NOT NULL` (e.g. `agent-1`, indexed)
+- `name`: `VARCHAR(100) NOT NULL` (e.g. `Research Assistant`)
+- `agent_type`: `VARCHAR(50) NOT NULL` (e.g. `Retrieval`, `Messaging`, `Analytics`, `Files`)
+- `status`: `VARCHAR(50) NOT NULL` (e.g. `Active (demo)`, `Idle (demo)`)
+- `description`: `VARCHAR(255) NULL`
+- `created_at`: `VARCHAR(50) NOT NULL` (ISO-8601 timestamp)
+- `updated_at`: `VARCHAR(50) NOT NULL` (ISO-8601 timestamp)
+- `is_active`: `BOOLEAN NOT NULL DEFAULT 1`
+
+#### 2. `tools` (Primary Key: `Integer` autoincrement)
+- `id`: `INTEGER PRIMARY KEY AUTOINCREMENT`
+- `tool_code`: `VARCHAR(50) UNIQUE NOT NULL` (e.g. `tool-1`, indexed)
+- `name`: `VARCHAR(100) NOT NULL` (e.g. `Public Knowledge Search`)
+- `description`: `VARCHAR(255) NULL`
+- `risk_level`: `VARCHAR(20) NOT NULL` (CHECK: `'Low'`, `'Medium'`, `'High'`, `'Critical'`)
+- `is_active`: `BOOLEAN NOT NULL DEFAULT 1`
+- `created_at`: `VARCHAR(50) NOT NULL` (ISO-8601 timestamp)
+- `updated_at`: `VARCHAR(50) NOT NULL` (ISO-8601 timestamp)
+
+#### 3. `agent_tools` (Many-to-Many Junction Table)
+- `id`: `INTEGER PRIMARY KEY AUTOINCREMENT`
+- `agent_id`: `INTEGER NOT NULL` (`FOREIGN KEY REFERENCES agents(id) ON DELETE CASCADE`)
+- `tool_id`: `INTEGER NOT NULL` (`FOREIGN KEY REFERENCES tools(id) ON DELETE CASCADE`)
+- `permission_status`: `VARCHAR(30) NOT NULL` (CHECK: `'Allowed'`, `'Approval Required'`, `'Restricted'`, `'Blocked'`)
+- `created_at`: `VARCHAR(50) NOT NULL`
+- `updated_at`: `VARCHAR(50) NOT NULL`
+- **Constraint**: `UNIQUE(agent_id, tool_id)` (`uq_agent_tool_pair`)
+
+#### 4. `security_events` (Primary Key: `Integer` autoincrement)
+- `id`: `INTEGER PRIMARY KEY AUTOINCREMENT`
+- `event_code`: `VARCHAR(50) UNIQUE NOT NULL` (e.g. `EV-1001`, indexed)
+- `agent_id`: `INTEGER NULL` (`FOREIGN KEY REFERENCES agents(id) ON DELETE SET NULL`)
+- `tool_id`: `INTEGER NULL` (`FOREIGN KEY REFERENCES tools(id) ON DELETE SET NULL`)
+- `category`: `VARCHAR(100) NOT NULL`
+- `source`: `VARCHAR(100) NOT NULL`
+- `risk_score`: `INTEGER NOT NULL` (CHECK: `0 <= risk_score <= 100`)
+- `risk_level`: `VARCHAR(20) NOT NULL` (CHECK: `'Low'`, `'Medium'`, `'High'`, `'Critical'`)
+- `decision`: `VARCHAR(30) NOT NULL` (CHECK: `'Allowed'`, `'Approval required'`, `'Approval Required'`, `'Blocked'`)
+- `explanation`: `TEXT NOT NULL`
+- `event_source`: `VARCHAR(50) NOT NULL DEFAULT 'application'`
+- `created_at`: `VARCHAR(50) NOT NULL` (indexed)
+- `is_archived`: `BOOLEAN NOT NULL DEFAULT 0`
+
+#### 5. `approval_requests` (Primary Key: `Integer` autoincrement)
+- `id`: `INTEGER PRIMARY KEY AUTOINCREMENT`
+- `approval_code`: `VARCHAR(50) UNIQUE NOT NULL` (e.g. `AP-201`, indexed)
+- `agent_id`: `INTEGER NULL` (`FOREIGN KEY REFERENCES agents(id) ON DELETE SET NULL`)
+- `tool_id`: `INTEGER NULL` (`FOREIGN KEY REFERENCES tools(id) ON DELETE SET NULL`)
+- `event_id`: `INTEGER NULL` (`FOREIGN KEY REFERENCES security_events(id) ON DELETE SET NULL`)
+- `operation`: `VARCHAR(255) NOT NULL`
+- `risk_level`: `VARCHAR(20) NOT NULL` (CHECK: `'Low'`, `'Medium'`, `'High'`, `'Critical'`)
+- `reason`: `VARCHAR(255) NOT NULL`
+- `status`: `VARCHAR(30) NOT NULL DEFAULT 'Pending'` (CHECK: `'Pending'`, `'Approved'`, `'Rejected'`, `'Cancelled'`)
+- `created_at`: `VARCHAR(50) NOT NULL`
+- `updated_at`: `VARCHAR(50) NOT NULL`
+
+#### 6. `application_settings` (Singleton Table, ID: 1)
+- `id`: `INTEGER PRIMARY KEY` (Default 1)
+- `risk_sensitivity`: `FLOAT NOT NULL DEFAULT 1.0` (CHECK: `0.1 <= risk_sensitivity <= 5.0`)
+- `automatic_critical_blocking`: `BOOLEAN NOT NULL DEFAULT 1`
+- `require_high_risk_approval`: `BOOLEAN NOT NULL DEFAULT 1`
+- `mask_sensitive_data`: `BOOLEAN NOT NULL DEFAULT 1`
+- `notifications_enabled`: `BOOLEAN NOT NULL DEFAULT 1`
+- `updated_at`: `VARCHAR(50) NOT NULL`
+
+---
+
+### Architectural Note: Absence of Artificial 1:1 Relationships
+In relational database design, **One-to-One (1:1)** relationships should model entities that possess distinct lifecycles, access control boundaries, or optional extension profiles (e.g., an `Agent` having a separate hardware enclave `AgentSecurityCredentials` table). Splitting cohesive entity columns across multiple tables merely to demonstrate a 1:1 relationship introduces unnecessary `JOIN` latency and complexity without functional value. In Shield AI, agent attributes and gateway preferences are co-located in their respective models.
+
+### Retained Legacy Tables
+To ensure auditability, continuous operation during upgrades, and zero-downtime data migration from Project 2:
+- **`tool_permissions`**: Retained as a historical legacy snapshot table; user-configured permissions are migrated into `agent_tools`.
+- **`settings`**: Retained as a legacy fallback configuration table; updated values are synchronized into `application_settings`.
+- **`legacy_security_events`** / **`legacy_approval_requests`**: Preserved for audit safety if present from earlier test cycles.
 
 ---
 
@@ -234,30 +309,31 @@ agents (1) ── (1) agent_security_profiles (holds hardware enclave keys & cry
 ## 6. Database Integrity & SQL Injection Defense
 
 ### Database-Level Constraints Enforced
-1. **Foreign Key Integrity**: Enforced via SQLite connection hook (`PRAGMA foreign_keys=ON;`). Deleting an agent cascades and cleans up `agent_tools`, while setting `agent_id` to NULL in historical security events.
+1. **Foreign Key Integrity**: Enforced via SQLite connection hook (`PRAGMA foreign_keys=ON;`). Deleting an agent cascades and cleans up `agent_tools`, while setting `agent_id` to NULL in historical security events to preserve audit logs.
 2. **CHECK Constraints**:
    - `ck_tool_risk_level`: `risk_level IN ('Low', 'Medium', 'High', 'Critical')`
    - `ck_agent_tool_permission`: `permission_status IN ('Allowed', 'Approval Required', 'Restricted', 'Blocked')`
    - `ck_security_event_score`: `risk_score >= 0 AND risk_score <= 100`
    - `ck_security_event_level`: `risk_level IN ('Low', 'Medium', 'High', 'Critical')`
-   - `ck_security_event_decision`: `decision IN ('Allowed', 'Approval required', 'Blocked')`
+   - `ck_security_event_decision`: `decision IN ('Allowed', 'Approval required', 'Approval Required', 'Blocked')`
    - `ck_approval_risk_level`: `risk_level IN ('Low', 'Medium', 'High', 'Critical')`
-   - `ck_approval_status`: `status IN ('Pending', 'Approved', 'Rejected')`
+   - `ck_approval_status`: `status IN ('Pending', 'Approved', 'Rejected', 'Cancelled')`
    - `ck_settings_sensitivity`: `risk_sensitivity >= 0.1 AND risk_sensitivity <= 5.0`
 3. **UNIQUE Constraints**:
-   - `tools.name`: Tool catalog names must be unique.
+   - `agents.agent_code`: Natural code identifier uniqueness.
+   - `tools.tool_code`: Natural tool code uniqueness.
    - `agent_tools(agent_id, tool_id)`: Composite uniqueness ensures no duplicate tool assignments per agent.
-   - `security_events.event_id`: Unique audit event reference.
-   - `approval_requests.approval_id`: Unique approval identifier.
+   - `security_events.event_code`: Unique audit event reference.
+   - `approval_requests.approval_code`: Unique approval identifier.
 
-### SQL Injection Immunity
-All database interactions use **SQLAlchemy ORM 2.x parameterized statements** (`session.execute(select(...).where(...))`). User input is treated strictly as bound parameters and is never concatenated directly into SQL strings:
+### Parameterized Queries & Defense in Depth
+All database queries are executed using **SQLAlchemy ORM 2.x parameterized statements** (`session.execute(select(...).where(...))`). User input values are bound strictly as parameters and are never concatenated into SQL strings:
 ```python
 # SECURE: Automatically compiled into bound parameterized SQL
-stmt = select(Tool).where(Tool.id == tool_id)
+stmt = select(Tool).where(Tool.tool_code == tool_code)
 result = db.scalars(stmt).first()
 ```
-Even when searching audit logs with raw text containing quotes or SQL syntax (e.g. `' OR '1'='1`), input is safely bound as literal text parameters.
+While parameterized queries effectively prevent classic SQL injection (such as `' OR '1'='1`), comprehensive defense in depth is achieved by combining ORM parameterization with strict syntactic validation at the FastAPI/Pydantic gatekeeper layer, semantic business validation, and explicit database CHECK constraints.
 
 ---
 
@@ -287,25 +363,26 @@ alembic current
 
 ## 8. Automated Testing & Verification
 
-The test suite contains 50 automated tests executing against an isolated temporary SQLite database, verifying model constraints, relationships, complete CRUD endpoints, SQL injection defense, and frontend integration.
+The test suite contains **54 automated tests** executing against an isolated temporary SQLite database, verifying model constraints, relationships, complete CRUD endpoints, Alembic migrations on fresh databases, rollback behavior, SQL injection defense, and frontend integration.
 
 ```powershell
 python -m pytest backend/tests -v
 ```
 
-### Verified Test Results (50 Passed in 11.82s):
-- **Model Constraints & Foreign Keys**: `test_models_and_schema.py` (CHECK constraint enforcement, foreign key referential integrity, UNIQUE constraints) — **PASSED**
-- **Complete CRUD Operations**: `test_crud_operations.py` (Full CRUD across Agents, Tools, AgentTools, Events, Approvals) — **PASSED**
-- **Relational Integrity**: `test_relationships.py` (1:M cascades, M:M junction tables, cascade deletes) — **PASSED**
-- **SQL Injection Defense**: `test_sql_injection.py` (Malicious SQL input in queries, search fields, and parameter bounds) — **PASSED**
-- **System Health**: `test_health.py` (Health check and root serving) — **PASSED**
-- **Prompt Scanner**: `test_scanner.py` (Prompt injection, PII masking, length validation) — **PASSED**
-- **Permissions**: `test_permissions.py` (Matrix operations, validation, reset) — **PASSED**
-- **Approval Workflow**: `test_approvals.py` (State transitions, duplicate prevention, conflicts) — **PASSED**
-- **Audit Logs**: `test_events.py` (Search filters, pagination, category selection) — **PASSED**
-- **Attack Simulator**: `test_simulator.py` (Attack execution, policy evaluation) — **PASSED**
-- **Persistence**: `test_persistence.py` (Settings updates, database persistence across calls) — **PASSED**
-- **Integration**: `test_integration.py` (End-to-end frontend-backend contract compliance) — **PASSED**
+### Verified Test Results (54 Passed in 4.64s):
+- **Alembic Migrations**: `test_migrations.py` (Fresh DB creation, downgrade & re-upgrade, Project 2 data preservation, foreign keys/constraints) — **4 PASSED**
+- **Model Constraints & Foreign Keys**: `test_models_and_schema.py` (CHECK constraint enforcement, foreign key referential integrity, UNIQUE constraints) — **5 PASSED**
+- **Complete CRUD Operations**: `test_crud_operations.py` (Full CRUD across Agents, Tools, AgentTools, Events, Approvals) — **5 PASSED**
+- **Relational Integrity**: `test_relationships.py` (1:M cascades, M:M junction tables, cascade deletes) — **3 PASSED**
+- **SQL Injection Defense**: `test_sql_injection.py` (Malicious SQL input in queries, search fields, and parameter bounds) — **2 PASSED**
+- **System Health**: `test_health.py` (Health check and root serving) — **2 PASSED**
+- **Prompt Scanner**: `test_scanner.py` (Prompt injection, PII masking, length validation) — **5 PASSED**
+- **Permissions**: `test_permissions.py` (Matrix operations, validation, reset) — **6 PASSED**
+- **Approval Workflow**: `test_approvals.py` (State transitions, duplicate prevention, conflicts) — **5 PASSED**
+- **Audit Logs**: `test_events.py` (Search filters, pagination, category selection) — **4 PASSED**
+- **Attack Simulator**: `test_simulator.py` (Attack execution, policy evaluation) — **4 PASSED**
+- **Persistence**: `test_persistence.py` (Settings updates, database persistence across calls) — **5 PASSED**
+- **Integration**: `test_integration.py` (End-to-end frontend-backend contract compliance) — **4 PASSED**
 
 ---
 
@@ -326,10 +403,10 @@ shield-ai/
 ├── backend/
 │   ├── requirements.txt        # Backend dependencies (FastAPI, SQLAlchemy, Alembic)
 │   ├── migrations/             # Alembic migration revisions
-│   │   ├── env.py
+│   │   ├── env.py              # Environment runner with NullPool & dynamic URL
 │   │   ├── script.py.mako
 │   │   └── versions/
-│   │       └── c569f299eaed_create_project3_relational_schema.py
+│   │       └── c569f299eaed_create_project3_relational_schema.py # Full schema migration
 │   ├── app/
 │   │   ├── __init__.py
 │   │   ├── main.py             # FastAPI entrypoint, middleware, static mounting
@@ -337,8 +414,8 @@ shield-ai/
 │   │   ├── database/           # SQLAlchemy 2.0 database engine & session factory
 │   │   │   ├── __init__.py
 │   │   │   ├── base.py         # DeclarativeBase & datetime helpers
-│   │   │   ├── connection.py   # Engine setup & PRAGMA foreign_keys listener
-│   │   │   ├── session.py      # FastAPI get_db dependency
+│   │   │   ├── connection.py   # Shared Engine cache & PRAGMA foreign_keys listener
+│   │   │   ├── session.py      # Reusable session factory & FastAPI get_db dependency
 │   │   │   └── migration.py    # Legacy migration & demonstration seed loader
 │   │   ├── models/             # SQLAlchemy ORM Relational Models
 │   │   │   ├── __init__.py
@@ -384,8 +461,9 @@ shield-ai/
 │   │       ├── policy_engine.py   # Tool policy & decision hierarchy
 │   │       ├── risk_engine.py     # Composite risk scoring
 │   │       └── audit_service.py   # Event & approval audit persistence
-│   └── tests/                  # Pytest Automated Test Suite (50 Tests)
-│       ├── conftest.py         # Test DB isolation fixtures
+│   └── tests/                  # Pytest Automated Test Suite (54 Tests)
+│       ├── conftest.py         # Test DB isolation fixtures & clean session lifecycle
+│       ├── test_migrations.py        # Alembic fresh DB, rollback & preservation tests
 │       ├── test_models_and_schema.py # Relational constraints & foreign keys
 │       ├── test_crud_operations.py   # Full CRUD endpoint tests
 │       ├── test_relationships.py     # 1:M and M:M cascade tests

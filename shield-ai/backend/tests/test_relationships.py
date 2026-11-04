@@ -70,3 +70,4 @@ def test_agents_tools_many_to_many():
         db.refresh(ag1)
         ag1_tools = [at.tool.tool_code for at in ag1.agent_tools]
         assert "tool-1" in ag1_tools
+

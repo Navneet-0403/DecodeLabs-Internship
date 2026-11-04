@@ -11,3 +11,4 @@ class DashboardResponse(BaseModel):
     recent_events: List[EventResponse]
     activity_timeline: List[int]
     protection_modules: List[str]
+

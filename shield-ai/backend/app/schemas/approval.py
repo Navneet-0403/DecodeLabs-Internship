@@ -59,3 +59,4 @@ class ApprovalResponse(BaseModel):
     updated_at: str
 
     model_config = {"from_attributes": True}
+

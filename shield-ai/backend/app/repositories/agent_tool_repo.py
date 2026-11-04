@@ -56,3 +56,4 @@ class AgentToolRepository:
     def delete(db: Session, assignment: AgentTool) -> None:
         db.delete(assignment)
         db.commit()
+

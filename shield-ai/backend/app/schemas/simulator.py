@@ -20,3 +20,4 @@ class SimulationResponse(BaseModel):
     approval_created: Optional[str] = None
     event_id: str
     event_code: str
+

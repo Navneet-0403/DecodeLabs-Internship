@@ -88,3 +88,4 @@ class ApprovalRepository:
         db.commit()
         db.refresh(approval)
         return approval
+

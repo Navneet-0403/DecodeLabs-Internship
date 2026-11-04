@@ -87,3 +87,4 @@ def test_foreign_key_referential_integrity():
         with pytest.raises(IntegrityError):
             db.commit()
         db.rollback()
+
