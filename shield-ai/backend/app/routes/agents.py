@@ -1,132 +1,257 @@
-import sqlite3
-from typing import List, Dict, Any
-from fastapi import APIRouter, Depends
-from ..database import get_db
-from ..schemas import AgentResponse, AgentActivityResponse
+from typing import List
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
+from ..database.session import get_db
+from ..repositories.agent_repo import AgentRepository
+from ..repositories.agent_tool_repo import AgentToolRepository
+from ..repositories.tool_repo import ToolRepository
+from ..schemas.agent import AgentCreate, AgentUpdate, AgentResponse, AgentActivityResponse
+from ..schemas.agent_tool import AgentToolAssignRequest, AgentToolUpdateRequest, AgentToolResponse
 from ..exceptions import APIException
 from ..services.policy_engine import map_tool_permission_to_decision
 
-router = APIRouter(prefix="/api/agents", tags=["Agent Monitor"])
+router = APIRouter(prefix="/api/agents", tags=["Agent Monitor & CRUD"])
 
-AGENT_CATALOG = [
-    {
-        "agent_id": "agent-1",
-        "index": 0,
-        "agent_name": "Research Assistant",
-        "agent_type": "Retrieval",
-        "demo_status": "Active (demo)",
-        "permission_profile": "Read-only public",
-        "risk_level": "Low",
-        "simulated_requests": 42,
-        "proposed_action": "search a public knowledge base",
-        "tool_id": "tool-1"
-    },
-    {
-        "agent_id": "agent-2",
-        "index": 1,
-        "agent_name": "Email Assistant",
-        "agent_type": "Messaging",
-        "demo_status": "Active (demo)",
-        "permission_profile": "Approval for external",
-        "risk_level": "Medium",
-        "simulated_requests": 17,
-        "proposed_action": "send an external email",
-        "tool_id": "tool-5"
-    },
-    {
-        "agent_id": "agent-3",
-        "index": 2,
-        "agent_name": "Data Analyst",
-        "agent_type": "Analytics",
-        "demo_status": "Active (demo)",
-        "permission_profile": "Restricted customer data",
-        "risk_level": "High",
-        "simulated_requests": 29,
-        "proposed_action": "read customer records",
-        "tool_id": "tool-4"
-    },
-    {
-        "agent_id": "agent-4",
-        "index": 3,
-        "agent_name": "File Management Agent",
-        "agent_type": "Files",
-        "demo_status": "Idle (demo)",
-        "permission_profile": "No deletion",
-        "risk_level": "Medium",
-        "simulated_requests": 8,
-        "proposed_action": "delete protected files",
-        "tool_id": "tool-6"
-    }
-]
+def agent_to_response(agent, db: Session) -> AgentResponse:
+    # Calculate simulated requests and permission profile
+    events_count = len(agent.security_events)
+    tools_count = len(agent.agent_tools)
+    simulated_reqs = 40 + events_count * 2
+    
+    # Permission profile description
+    perm_profile = agent.description or f"{agent.agent_type} agent with {tools_count} tool(s)"
+    if "Research" in agent.name:
+        perm_profile = "Read-only public"
+        simulated_reqs = max(42, simulated_reqs)
+        risk = "Low"
+    elif "Email" in agent.name:
+        perm_profile = "Approval for external"
+        simulated_reqs = max(17, simulated_reqs)
+        risk = "Medium"
+    elif "Data" in agent.name:
+        perm_profile = "Restricted customer data"
+        simulated_reqs = max(29, simulated_reqs)
+        risk = "High"
+    elif "File" in agent.name:
+        perm_profile = "No deletion"
+        simulated_reqs = max(8, simulated_reqs)
+        risk = "Medium"
+    else:
+        risk = "Low"
 
-def find_agent(identifier: str) -> Dict[str, Any]:
-    # Match by agent_id, slug, or 0-based index
-    for ag in AGENT_CATALOG:
-        if ag["agent_id"] == identifier or ag["agent_name"].lower().replace(" ", "-") == identifier.lower():
-            return ag
-    try:
-        idx = int(identifier)
-        if 0 <= idx < len(AGENT_CATALOG):
-            return AGENT_CATALOG[idx]
-    except ValueError:
-        pass
-    raise APIException(
-        status_code=404,
-        code="AGENT_NOT_FOUND",
-        message=f"Agent with identifier '{identifier}' was not found."
+    return AgentResponse(
+        id=agent.id,
+        agent_id=agent.agent_code,
+        agent_code=agent.agent_code,
+        agent_name=agent.name,
+        agent_type=agent.agent_type,
+        demo_status=agent.status,
+        status=agent.status,
+        description=agent.description,
+        permission_profile=perm_profile,
+        risk_level=risk,
+        simulated_requests=simulated_reqs,
+        is_active=agent.is_active,
+        created_at=agent.created_at,
+        updated_at=agent.updated_at
     )
 
 @router.get("", response_model=List[AgentResponse])
-def get_agents():
-    return [
-        AgentResponse(
-            agent_id=a["agent_id"],
-            agent_name=a["agent_name"],
-            agent_type=a["agent_type"],
-            demo_status=a["demo_status"],
-            permission_profile=a["permission_profile"],
-            risk_level=a["risk_level"],
-            simulated_requests=a["simulated_requests"]
-        )
-        for a in AGENT_CATALOG
-    ]
+def get_agents(active_only: bool = False, db: Session = Depends(get_db)):
+    """Retrieve all agents."""
+    agents = AgentRepository.get_all(db, active_only=active_only)
+    return [agent_to_response(a, db) for a in agents]
+
+@router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
+def create_agent(agent_in: AgentCreate, db: Session = Depends(get_db)):
+    """Create a new AI agent."""
+    if agent_in.agent_code:
+        existing = AgentRepository.get_by_code(db, agent_in.agent_code)
+        if existing:
+            raise APIException(status_code=400, code="AGENT_CODE_EXISTS", message=f"Agent code '{agent_in.agent_code}' already exists.")
+    agent = AgentRepository.create(db, agent_in)
+    return agent_to_response(agent, db)
+
+@router.get("/{agent_id}", response_model=AgentResponse)
+def get_agent(agent_id: str, db: Session = Depends(get_db)):
+    """Retrieve an individual agent by code, ID, or index."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+    return agent_to_response(agent, db)
+
+@router.put("/{agent_id}", response_model=AgentResponse)
+def update_agent(agent_id: str, agent_in: AgentUpdate, db: Session = Depends(get_db)):
+    """Update agent details."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+    updated = AgentRepository.update(db, agent, agent_in)
+    return agent_to_response(updated, db)
+
+@router.delete("/{agent_id}", response_model=AgentResponse)
+def delete_agent(agent_id: str, db: Session = Depends(get_db)):
+    """Soft-deletes / deactivates an agent safely, preserving audit history."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+    deactivated = AgentRepository.soft_delete(db, agent)
+    return agent_to_response(deactivated, db)
 
 @router.get("/{agent_id}/activity", response_model=AgentActivityResponse)
-def get_agent_activity(agent_id: str, conn: sqlite3.Connection = Depends(get_db)):
-    ag = find_agent(agent_id)
-    
-    # Retrieve assigned tool's real current permission from SQLite
-    cursor = conn.cursor()
-    cursor.execute("SELECT tool_name, permission_status FROM tool_permissions WHERE tool_id = ?", (ag["tool_id"],))
-    row = cursor.fetchone()
-    if not row:
-        raise APIException(status_code=500, code="TOOL_CONFIG_ERROR", message=f"Tool {ag['tool_id']} not found in database.")
-    
-    tool_name = row["tool_name"]
-    perm_status = row["permission_status"]
+def get_agent_activity(agent_id: str, db: Session = Depends(get_db)):
+    """Retrieve real-time telemetry workflow and policy evaluation for an agent."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+
+    # Determine proposed action and primary tool
+    if "Research" in agent.name:
+        action = "search a public knowledge base"
+        tool_code = "tool-1"
+        risk = "Low"
+        profile = "Read-only public"
+    elif "Email" in agent.name:
+        action = "send an external email"
+        tool_code = "tool-5"
+        risk = "Medium"
+        profile = "Approval for external"
+    elif "Data" in agent.name:
+        action = "read customer records"
+        tool_code = "tool-4"
+        risk = "High"
+        profile = "Restricted customer data"
+    else:
+        action = "delete protected files"
+        tool_code = "tool-6"
+        risk = "Medium"
+        profile = "No deletion"
+
+    tool = ToolRepository.get_by_code(db, tool_code)
+    if not tool:
+        tool = ToolRepository.get_all(db)[0]
+
+    # Look up agent-specific tool permission from agent_tools
+    at = AgentToolRepository.get_by_agent_and_tool(db, agent.id, tool.id)
+    perm_status = at.permission_status if at else "Allowed"
     decision = map_tool_permission_to_decision(perm_status)
 
     workflow_stages = [
-        f"User prompt received by {ag['agent_name']}",
+        f"User prompt received by {agent.name}",
         "Prompt inspected (rule-based heuristic)",
-        f"Risk assessed: {ag['risk_level']}",
-        f"Policy checked: {ag['permission_profile']}",
-        f"Agent proposed: {ag['proposed_action']}",
-        f"Tool request intercepted: {tool_name}",
+        f"Risk assessed: {risk}",
+        f"Policy checked: {profile}",
+        f"Agent proposed: {action}",
+        f"Tool request intercepted: {tool.name}",
         f"Decision: {decision} (policy “{perm_status}”)",
         "Event recorded in audit log"
     ]
 
     return AgentActivityResponse(
-        agent_id=ag["agent_id"],
-        agent_name=ag["agent_name"],
-        agent_type=ag["agent_type"],
-        permission_profile=ag["permission_profile"],
-        risk_level=ag["risk_level"],
-        proposed_action=ag["proposed_action"],
-        intercepted_tool=tool_name,
+        agent_id=agent.agent_code,
+        agent_name=agent.name,
+        agent_type=agent.agent_type,
+        permission_profile=profile,
+        risk_level=risk,
+        proposed_action=action,
+        intercepted_tool=tool.name,
         tool_permission=perm_status,
         decision=decision,
         workflow_stages=workflow_stages
     )
 
+# --- Agent-Tool Junction CRUD Endpoints (Part 7.C) ---
+
+@router.get("/{agent_id}/tools", response_model=List[AgentToolResponse])
+def get_agent_tools(agent_id: str, db: Session = Depends(get_db)):
+    """Retrieve all tools and permissions assigned to a particular agent."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+    
+    assignments = AgentToolRepository.get_all_for_agent(db, agent.id)
+    return [
+        AgentToolResponse(
+            id=a.id,
+            agent_id=agent.id,
+            agent_code=agent.agent_code,
+            agent_name=agent.name,
+            tool_id=a.tool.id,
+            tool_code=a.tool.tool_code,
+            tool_name=a.tool.name,
+            permission_status=a.permission_status,
+            created_at=a.created_at,
+            updated_at=a.updated_at
+        )
+        for a in assignments
+    ]
+
+@router.post("/{agent_id}/tools", response_model=AgentToolResponse, status_code=status.HTTP_201_CREATED)
+def assign_tool_to_agent(agent_id: str, assign_in: AgentToolAssignRequest, db: Session = Depends(get_db)):
+    """Assign a tool to an agent with a specific permission policy."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+
+    tool = ToolRepository.get_by_identifier(db, str(assign_in.tool_id))
+    if not tool:
+        raise APIException(status_code=404, code="TOOL_NOT_FOUND", message=f"Tool '{assign_in.tool_id}' was not found.")
+
+    assignment = AgentToolRepository.assign(db, agent.id, tool.id, assign_in.permission_status)
+    return AgentToolResponse(
+        id=assignment.id,
+        agent_id=agent.id,
+        agent_code=agent.agent_code,
+        agent_name=agent.name,
+        tool_id=tool.id,
+        tool_code=tool.tool_code,
+        tool_name=tool.name,
+        permission_status=assignment.permission_status,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at
+    )
+
+@router.put("/{agent_id}/tools/{tool_id}", response_model=AgentToolResponse)
+def update_agent_tool_permission(agent_id: str, tool_id: str, update_in: AgentToolUpdateRequest, db: Session = Depends(get_db)):
+    """Update permission for an agent-tool pair."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+    tool = ToolRepository.get_by_identifier(db, tool_id)
+    if not tool:
+        raise APIException(status_code=404, code="TOOL_NOT_FOUND", message=f"Tool '{tool_id}' was not found.")
+
+    assignment = AgentToolRepository.get_by_agent_and_tool(db, agent.id, tool.id)
+    if not assignment:
+        raise APIException(status_code=404, code="ASSIGNMENT_NOT_FOUND", message=f"Tool '{tool.name}' is not assigned to agent '{agent.name}'.")
+
+    updated = AgentToolRepository.update_permission(db, assignment, update_in.permission_status)
+    return AgentToolResponse(
+        id=updated.id,
+        agent_id=agent.id,
+        agent_code=agent.agent_code,
+        agent_name=agent.name,
+        tool_id=tool.id,
+        tool_code=tool.tool_code,
+        tool_name=tool.name,
+        permission_status=updated.permission_status,
+        created_at=updated.created_at,
+        updated_at=updated.updated_at
+    )
+
+@router.delete("/{agent_id}/tools/{tool_id}", status_code=status.HTTP_200_OK)
+def remove_agent_tool_assignment(agent_id: str, tool_id: str, db: Session = Depends(get_db)):
+    """Remove tool assignment from an agent."""
+    agent = AgentRepository.get_by_identifier(db, agent_id)
+    if not agent:
+        raise APIException(status_code=404, code="AGENT_NOT_FOUND", message=f"Agent '{agent_id}' was not found.")
+    tool = ToolRepository.get_by_identifier(db, tool_id)
+    if not tool:
+        raise APIException(status_code=404, code="TOOL_NOT_FOUND", message=f"Tool '{tool_id}' was not found.")
+
+    assignment = AgentToolRepository.get_by_agent_and_tool(db, agent.id, tool.id)
+    if not assignment:
+        raise APIException(status_code=404, code="ASSIGNMENT_NOT_FOUND", message=f"Tool '{tool.name}' is not assigned to agent '{agent.name}'.")
+
+    AgentToolRepository.delete(db, assignment)
+    return {"status": "ok", "message": f"Tool '{tool.name}' unassigned from agent '{agent.name}'."}

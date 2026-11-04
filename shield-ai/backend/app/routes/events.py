@@ -1,109 +1,82 @@
-import sqlite3
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
-from ..database import get_db
-from ..schemas import EventResponse, EventListResponse
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.orm import Session
+from ..database.session import get_db
+from ..repositories.event_repo import SecurityEventRepository
+from ..schemas.security_event import EventCreate, EventUpdate, EventResponse, EventListResponse
 from ..exceptions import APIException
 
-router = APIRouter(prefix="/api/events", tags=["Threat Logs"])
+router = APIRouter(prefix="/api/events", tags=["Threat Logs & Security Event CRUD"])
+
+def format_event_response(ev) -> EventResponse:
+    return EventResponse(
+        id=ev.id,
+        event_id=ev.event_code,
+        event_code=ev.event_code,
+        agent_id=ev.agent_id,
+        tool_id=ev.tool_id,
+        category=ev.category,
+        source=ev.source,
+        risk_score=ev.risk_score,
+        risk_level=ev.risk_level,
+        decision=ev.decision,
+        explanation=ev.explanation,
+        event_source=ev.event_source,
+        created_at=ev.created_at,
+        is_archived=ev.is_archived
+    )
 
 @router.get("", response_model=EventListResponse)
 def get_events(
-    q: Optional[str] = Query(None, description="Search query across category, source, explanation, event_id"),
+    q: Optional[str] = Query(None, description="Search query across category, source, explanation, event_code"),
     risk: Optional[str] = Query(None, description="Filter by risk level"),
     category: Optional[str] = Query(None, description="Filter by category"),
     decision: Optional[str] = Query(None, description="Filter by decision"),
+    include_archived: bool = Query(False, description="Include archived security events"),
     limit: int = Query(50, ge=1, le=200, description="Max records to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    conn: sqlite3.Connection = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
-    cursor = conn.cursor()
-    conditions = []
-    params = []
-
-    if q:
-        search_pattern = f"%{q.strip().lower()}%"
-        conditions.append("(LOWER(category) LIKE ? OR LOWER(source) LIKE ? OR LOWER(explanation) LIKE ? OR LOWER(event_id) LIKE ?)")
-        params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
-
-    if risk:
-        conditions.append("risk_level = ?")
-        params.append(risk)
-
-    if category:
-        conditions.append("category = ?")
-        params.append(category)
-
-    if decision:
-        conditions.append("decision = ?")
-        params.append(decision)
-
-    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
-
-    # Count total matching
-    count_query = f"SELECT COUNT(*) FROM security_events{where_clause}"
-    cursor.execute(count_query, params)
-    total = cursor.fetchone()[0]
-
-    # Query paginated rows
-    query = f"""
-        SELECT id, event_id, category, source, risk_level, decision, explanation, created_at, event_source
-        FROM security_events
-        {where_clause}
-        ORDER BY id DESC
-        LIMIT ? OFFSET ?
-    """
-    cursor.execute(query, params + [limit, offset])
-    rows = cursor.fetchall()
-
-    events = [
-        EventResponse(
-            id=r["id"],
-            event_id=r["event_id"],
-            category=r["category"],
-            source=r["source"],
-            risk_level=r["risk_level"],
-            decision=r["decision"],
-            explanation=r["explanation"],
-            created_at=r["created_at"],
-            event_source=r["event_source"]
-        )
-        for r in rows
-    ]
-
+    """Retrieve security audit events with search, filtering, and pagination."""
+    events, total = SecurityEventRepository.get_all(
+        db, q=q, risk=risk, category=category, decision=decision,
+        include_archived=include_archived, limit=limit, offset=offset
+    )
     return EventListResponse(
-        events=events,
+        events=[format_event_response(e) for e in events],
         total=total,
         limit=limit,
         offset=offset
     )
 
+@router.post("", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
+def create_event(event_in: EventCreate, db: Session = Depends(get_db)):
+    """Create a security event through a validated internal event-creation operation."""
+    event = SecurityEventRepository.create(db, event_in)
+    return format_event_response(event)
+
 @router.get("/{event_id}", response_model=EventResponse)
-def get_event(event_id: str, conn: sqlite3.Connection = Depends(get_db)):
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, event_id, category, source, risk_level, decision, explanation, created_at, event_source
-        FROM security_events
-        WHERE event_id = ?
-    """, (event_id,))
-    row = cursor.fetchone()
+def get_event(event_id: str, db: Session = Depends(get_db)):
+    """Retrieve complete information about an individual security event."""
+    event = SecurityEventRepository.get_by_identifier(db, event_id)
+    if not event:
+        raise APIException(status_code=404, code="EVENT_NOT_FOUND", message=f"Security event with ID '{event_id}' was not found.")
+    return format_event_response(event)
 
-    if not row:
-        raise APIException(
-            status_code=404,
-            code="EVENT_NOT_FOUND",
-            message=f"Security event with ID '{event_id}' was not found."
-        )
+@router.put("/{event_id}", response_model=EventResponse)
+def update_event_metadata(event_id: str, update_in: EventUpdate, db: Session = Depends(get_db)):
+    """Update permitted administrative metadata (category, explanation, archived status), not the immutable audit decision."""
+    event = SecurityEventRepository.get_by_identifier(db, event_id)
+    if not event:
+        raise APIException(status_code=404, code="EVENT_NOT_FOUND", message=f"Security event with ID '{event_id}' was not found.")
+    updated = SecurityEventRepository.update(db, event, update_in)
+    return format_event_response(updated)
 
-    return EventResponse(
-        id=row["id"],
-        event_id=row["event_id"],
-        category=row["category"],
-        source=row["source"],
-        risk_level=row["risk_level"],
-        decision=row["decision"],
-        explanation=row["explanation"],
-        created_at=row["created_at"],
-        event_source=row["event_source"]
-    )
-
+@router.delete("/{event_id}", response_model=EventResponse)
+def archive_event(event_id: str, db: Session = Depends(get_db)):
+    """Safely archive / soft-delete a security event without destroying historical audit trails."""
+    event = SecurityEventRepository.get_by_identifier(db, event_id)
+    if not event:
+        raise APIException(status_code=404, code="EVENT_NOT_FOUND", message=f"Security event with ID '{event_id}' was not found.")
+    archived = SecurityEventRepository.soft_delete(db, event)
+    return format_event_response(archived)

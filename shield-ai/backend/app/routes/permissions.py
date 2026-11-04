@@ -1,130 +1,90 @@
-import sqlite3
 from typing import List
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, status
-from ..database import get_db, reset_tool_permissions
-from ..schemas import ToolResponse, ToolUpdateRequest, VALID_TOOL_PERMISSIONS
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from ..database.session import get_db
+from ..database import reset_tool_permissions
+from ..repositories.tool_repo import ToolRepository
+from ..repositories.agent_tool_repo import AgentToolRepository
+from ..repositories.agent_repo import AgentRepository
+from ..schemas.tool import ToolResponse, ToolUpdateRequest
 from ..exceptions import APIException
 
 router = APIRouter(prefix="/api/tools", tags=["Tool Permissions"])
 
-def get_tool_by_identifier(cursor: sqlite3.Cursor, identifier: str) -> sqlite3.Row:
-    # 1. Match tool_id directly (e.g. 'tool-1')
-    cursor.execute("""
-        SELECT id, tool_id, tool_name, description, assigned_agent, risk_level, permission_status, updated_at
-        FROM tool_permissions WHERE tool_id = ?
-    """, (identifier,))
-    row = cursor.fetchone()
-    if row:
-        return row
+DEFAULT_AGENT_ASSIGNMENTS = {
+    "tool-1": "Research Assistant",
+    "tool-2": "Data Analyst",
+    "tool-3": "Research Assistant",
+    "tool-4": "Data Analyst",
+    "tool-5": "Email Assistant",
+    "tool-6": "File Management Agent",
+    "tool-7": "Data Analyst",
+}
 
-    # 2. Try match by database id
-    try:
-        db_id = int(identifier)
-        cursor.execute("""
-            SELECT id, tool_id, tool_name, description, assigned_agent, risk_level, permission_status, updated_at
-            FROM tool_permissions WHERE id = ?
-        """, (db_id,))
-        row = cursor.fetchone()
-        if row:
-            return row
-    except ValueError:
-        pass
+def format_tool_response(tool, db: Session) -> ToolResponse:
+    # Find assignment in agent_tools
+    assigned_name = DEFAULT_AGENT_ASSIGNMENTS.get(tool.tool_code, "Research Assistant")
+    agent = db.query(AgentRepository.get_all(db)[0].__class__).filter_by(name=assigned_name).first()
+    
+    perm = "Allowed"
+    if agent:
+        at = AgentToolRepository.get_by_agent_and_tool(db, agent.id, tool.id)
+        if at:
+            perm = at.permission_status
+    else:
+        # Check any assignment
+        assignments = db.query(AgentToolRepository.get_all(db)[0].__class__).filter_by(tool_id=tool.id).all() if AgentToolRepository.get_all(db) else []
+        if assignments:
+            perm = assignments[0].permission_status
+            assigned_name = assignments[0].agent.name
 
-    # 3. Try match by 0-based offset or tool name
-    cursor.execute("""
-        SELECT id, tool_id, tool_name, description, assigned_agent, risk_level, permission_status, updated_at
-        FROM tool_permissions ORDER BY id ASC
-    """)
-    all_rows = cursor.fetchall()
-    try:
-        idx = int(identifier)
-        if 0 <= idx < len(all_rows):
-            return all_rows[idx]
-    except ValueError:
-        pass
-
-    for r in all_rows:
-        if r["tool_name"].lower() == identifier.lower():
-            return r
-
-    raise APIException(
-        status_code=404,
-        code="TOOL_NOT_FOUND",
-        message=f"Tool with identifier '{identifier}' was not found."
+    return ToolResponse(
+        id=tool.id,
+        tool_id=tool.tool_code,
+        tool_code=tool.tool_code,
+        tool_name=tool.name,
+        description=tool.description or "",
+        assigned_agent=assigned_name,
+        risk_level=tool.risk_level,
+        permission_status=perm,
+        updated_at=tool.updated_at
     )
 
 @router.get("", response_model=List[ToolResponse])
-def get_tools(conn: sqlite3.Connection = Depends(get_db)):
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, tool_id, tool_name, description, assigned_agent, risk_level, permission_status, updated_at
-        FROM tool_permissions ORDER BY id ASC
-    """)
-    rows = cursor.fetchall()
-    return [
-        ToolResponse(
-            id=r["id"],
-            tool_id=r["tool_id"],
-            tool_name=r["tool_name"],
-            description=r["description"],
-            assigned_agent=r["assigned_agent"],
-            risk_level=r["risk_level"],
-            permission_status=r["permission_status"],
-            updated_at=r["updated_at"]
-        )
-        for r in rows
-    ]
+def get_tools(db: Session = Depends(get_db)):
+    """Retrieve all tool permissions using SQLAlchemy ORM models."""
+    tools = ToolRepository.get_all(db)
+    return [format_tool_response(t, db) for t in tools]
 
 @router.get("/{tool_id}", response_model=ToolResponse)
-def get_tool(tool_id: str, conn: sqlite3.Connection = Depends(get_db)):
-    cursor = conn.cursor()
-    row = get_tool_by_identifier(cursor, tool_id)
-    return ToolResponse(
-        id=row["id"],
-        tool_id=row["tool_id"],
-        tool_name=row["tool_name"],
-        description=row["description"],
-        assigned_agent=row["assigned_agent"],
-        risk_level=row["risk_level"],
-        permission_status=row["permission_status"],
-        updated_at=row["updated_at"]
-    )
+def get_tool(tool_id: str, db: Session = Depends(get_db)):
+    """Retrieve a particular tool's permission configuration."""
+    tool = ToolRepository.get_by_identifier(db, tool_id)
+    if not tool:
+        raise APIException(status_code=404, code="TOOL_NOT_FOUND", message=f"Tool with identifier '{tool_id}' was not found.")
+    return format_tool_response(tool, db)
 
 @router.put("/{tool_id}", response_model=ToolResponse)
-def update_tool_permission(tool_id: str, request: ToolUpdateRequest, conn: sqlite3.Connection = Depends(get_db)):
-    cursor = conn.cursor()
-    row = get_tool_by_identifier(cursor, tool_id)
+def update_tool_permission(tool_id: str, request: ToolUpdateRequest, db: Session = Depends(get_db)):
+    """Update tool permission status in the relational agent_tools junction table."""
+    tool = ToolRepository.get_by_identifier(db, tool_id)
+    if not tool:
+        raise APIException(status_code=404, code="TOOL_NOT_FOUND", message=f"Tool with identifier '{tool_id}' was not found.")
 
-    new_status = request.permission_status
-    now = datetime.now(timezone.utc).isoformat()
+    assigned_agent_name = DEFAULT_AGENT_ASSIGNMENTS.get(tool.tool_code, "Research Assistant")
+    agent = AgentRepository.get_by_identifier(db, assigned_agent_name)
+    if not agent:
+        agents = AgentRepository.get_all(db)
+        agent = agents[0] if agents else None
 
-    cursor.execute("""
-        UPDATE tool_permissions
-        SET permission_status = ?, updated_at = ?
-        WHERE id = ?
-    """, (new_status, now, row["id"]))
-    conn.commit()
+    if agent:
+        AgentToolRepository.assign(db, agent.id, tool.id, request.permission_status)
 
-    cursor.execute("""
-        SELECT id, tool_id, tool_name, description, assigned_agent, risk_level, permission_status, updated_at
-        FROM tool_permissions WHERE id = ?
-    """, (row["id"],))
-    updated_row = cursor.fetchone()
-
-    return ToolResponse(
-        id=updated_row["id"],
-        tool_id=updated_row["tool_id"],
-        tool_name=updated_row["tool_name"],
-        description=updated_row["description"],
-        assigned_agent=updated_row["assigned_agent"],
-        risk_level=updated_row["risk_level"],
-        permission_status=updated_row["permission_status"],
-        updated_at=updated_row["updated_at"]
-    )
+    tool = ToolRepository.get_by_id(db, tool.id)
+    return format_tool_response(tool, db)
 
 @router.post("/reset", response_model=List[ToolResponse])
-def reset_tools(conn: sqlite3.Connection = Depends(get_db)):
+def reset_tools(db: Session = Depends(get_db)):
+    """Restore default tool permissions."""
     reset_tool_permissions()
-    return get_tools(conn)
-
+    return get_tools(db)

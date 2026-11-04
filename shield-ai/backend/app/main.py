@@ -9,12 +9,13 @@ from fastapi.exceptions import RequestValidationError
 
 from .database import init_db, check_db_health
 from .exceptions import APIException, api_exception_handler, validation_exception_handler, general_exception_handler
-from .schemas import HealthResponse
+from .schemas.common import HealthResponse
 
 from .routes import (
     dashboard,
     scanner,
     agents,
+    tool_catalog,
     permissions,
     approvals,
     events,
@@ -26,14 +27,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize SQLite database and seed initial demo data if tables are empty
+    # Initialize SQLite database and run migrations/seeds safely
     init_db()
     yield
 
 app = FastAPI(
     title="Shield AI — AI Agent Security Shield",
-    description="Backend API Gateway and Policy Interceptor for Shield AI",
-    version="1.0.0",
+    description="Relational Database Integration & Policy Interceptor for Shield AI (DecodeLabs Project 3)",
+    version="3.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
@@ -77,6 +78,7 @@ def health_check():
 app.include_router(dashboard.router)
 app.include_router(scanner.router)
 app.include_router(agents.router)
+app.include_router(tool_catalog.router)
 app.include_router(permissions.router)
 app.include_router(approvals.router)
 app.include_router(events.router)

@@ -1,18 +1,17 @@
-import sqlite3
 from fastapi import APIRouter, Depends, status
-from ..database import get_db
-from ..schemas import ScanRequest, ScanResponse
+from sqlalchemy.orm import Session
+from ..database.session import get_db
+from ..schemas.scanner import ScanRequest, ScanResponse
 from ..services.risk_engine import scan_and_evaluate
 from ..services.audit_service import log_security_event
 
 router = APIRouter(prefix="/api/scans", tags=["Prompt Scanner"])
 
 @router.post("", response_model=ScanResponse, status_code=status.HTTP_200_OK)
-def scan_prompt(request: ScanRequest, conn: sqlite3.Connection = Depends(get_db)):
-    # 1. Analyze prompt with backend security engine and loaded policy
-    result = scan_and_evaluate(conn, request.prompt)
+def scan_prompt(request: ScanRequest, db: Session = Depends(get_db)):
+    """Analyze incoming prompt, detect malicious patterns & PII, and record event in SQLite via ORM."""
+    result = scan_and_evaluate(db, request.prompt)
 
-    # 2. Determine security event metadata (without raw prompt or secret leakage)
     hits = result["detected_indicators"]
     pii = result["sensitive_data"]
 
@@ -25,15 +24,16 @@ def scan_prompt(request: ScanRequest, conn: sqlite3.Connection = Depends(get_db)
 
     indicators_summary = ", ".join(hits + [p[0] for p in pii]) or "No indicators."
 
-    # 3. Store security event in SQLite
+    # Store event using ORM audit service
     log_security_event(
-        conn=conn,
+        db=db,
         category=category,
         source="Prompt Scanner",
         risk_level=result["risk_level"],
         decision=result["decision"],
         explanation=indicators_summary,
-        event_source="application"
+        event_source="application",
+        risk_score=result["risk_score"]
     )
 
     return ScanResponse(
@@ -46,4 +46,3 @@ def scan_prompt(request: ScanRequest, conn: sqlite3.Connection = Depends(get_db)
         explanation=result["explanation"],
         remediation=result["remediation"]
     )
-

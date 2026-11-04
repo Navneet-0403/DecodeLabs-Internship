@@ -1,67 +1,59 @@
-import sqlite3
-from datetime import datetime, timezone
-
-def generate_next_event_id(conn: sqlite3.Connection) -> str:
-    cursor = conn.cursor()
-    cursor.execute("SELECT event_id FROM security_events ORDER BY id DESC LIMIT 1")
-    row = cursor.fetchone()
-    if row and row[0].startswith("EV-"):
-        try:
-            num = int(row[0].split("-")[1])
-            return f"EV-{num + 1}"
-        except ValueError:
-            pass
-    cursor.execute("SELECT COUNT(*) FROM security_events")
-    count = cursor.fetchone()[0]
-    return f"EV-{1000 + count + 1}"
-
-def generate_next_approval_id(conn: sqlite3.Connection) -> str:
-    cursor = conn.cursor()
-    cursor.execute("SELECT approval_id FROM approval_requests ORDER BY id DESC LIMIT 1")
-    row = cursor.fetchone()
-    if row and row[0].startswith("AP-"):
-        try:
-            num = int(row[0].split("-")[1])
-            return f"AP-{num + 1}"
-        except ValueError:
-            pass
-    cursor.execute("SELECT COUNT(*) FROM approval_requests")
-    count = cursor.fetchone()[0]
-    return f"AP-{200 + count + 1}"
+from typing import Optional
+from sqlalchemy.orm import Session
+from ..models.security_event import SecurityEvent
+from ..models.approval import ApprovalRequest
+from ..repositories.event_repo import SecurityEventRepository
+from ..repositories.approval_repo import ApprovalRepository
+from ..schemas.security_event import EventCreate
+from ..schemas.approval import ApprovalCreate
 
 def log_security_event(
-    conn: sqlite3.Connection,
+    db: Session,
     category: str,
     source: str,
     risk_level: str,
     decision: str,
     explanation: str,
-    event_source: str = "application"
+    event_source: str = "application",
+    agent_id: Optional[int] = None,
+    tool_id: Optional[int] = None,
+    risk_score: Optional[int] = None
 ) -> str:
-    event_id = generate_next_event_id(conn)
-    now = datetime.now(timezone.utc).isoformat()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO security_events (event_id, category, source, risk_level, decision, explanation, created_at, event_source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (event_id, category, source, risk_level, decision, explanation, now, event_source))
-    conn.commit()
-    return event_id
+    if risk_score is None:
+        risk_score = 85 if risk_level == "Critical" else 70 if risk_level == "High" else 45 if risk_level == "Medium" else 15
+
+    event_in = EventCreate(
+        category=category,
+        source=source,
+        risk_score=risk_score,
+        risk_level=risk_level,
+        decision=decision,
+        explanation=explanation,
+        agent_id=agent_id,
+        tool_id=tool_id,
+        event_source=event_source
+    )
+    event = SecurityEventRepository.create(db, event_in)
+    return event.event_code
 
 def create_approval_request(
-    conn: sqlite3.Connection,
+    db: Session,
     agent_name: str,
     operation: str,
     risk_level: str,
-    reason: str
+    reason: str,
+    agent_id: Optional[int] = None,
+    tool_id: Optional[int] = None,
+    event_id: Optional[int] = None
 ) -> str:
-    approval_id = generate_next_approval_id(conn)
-    now = datetime.now(timezone.utc).isoformat()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO approval_requests (approval_id, agent_name, operation, risk_level, reason, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (approval_id, agent_name, operation, risk_level, reason, "Pending", now, now))
-    conn.commit()
-    return approval_id
-
+    approval_in = ApprovalCreate(
+        agent_id=agent_id,
+        tool_id=tool_id,
+        event_id=event_id,
+        operation=operation,
+        risk_level=risk_level,
+        reason=reason,
+        agent_name=agent_name
+    )
+    approval = ApprovalRepository.create(db, approval_in)
+    return approval.approval_code

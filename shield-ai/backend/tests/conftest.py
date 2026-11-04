@@ -10,7 +10,8 @@ _temp_dir = tempfile.TemporaryDirectory()
 _test_db_path = Path(_temp_dir.name) / "test_shield_ai.db"
 os.environ["SHIELD_AI_DB_PATH"] = str(_test_db_path)
 
-from backend.app.database import init_db, reset_demo_events_and_approvals, reset_tool_permissions
+from backend.app.database import init_db, reset_demo_events_and_approvals, reset_tool_permissions, get_session_factory
+from backend.app.models import Agent, Tool
 from backend.app.main import app
 
 # Initialize test database schema and seeds
@@ -27,5 +28,16 @@ def ensure_clean_test_db():
     """Ensures each test starts with standard demonstration baseline records."""
     reset_demo_events_and_approvals()
     reset_tool_permissions()
-    yield
 
+    # Clean up any ephemeral agents or tools created by previous CRUD tests
+    session_factory = get_session_factory()
+    with session_factory() as db:
+        initial_agent_codes = {"agent-1", "agent-2", "agent-3", "agent-4"}
+        initial_tool_codes = {"tool-1", "tool-2", "tool-3", "tool-4", "tool-5", "tool-6", "tool-7"}
+        db.query(Agent).filter(Agent.agent_code.notin_(initial_agent_codes)).delete(synchronize_session=False)
+        db.query(Agent).filter(Agent.agent_code.in_(initial_agent_codes)).update({Agent.is_active: True}, synchronize_session=False)
+        db.query(Tool).filter(Tool.tool_code.notin_(initial_tool_codes)).delete(synchronize_session=False)
+        db.query(Tool).filter(Tool.tool_code.in_(initial_tool_codes)).update({Tool.is_active: True}, synchronize_session=False)
+        db.commit()
+
+    yield
