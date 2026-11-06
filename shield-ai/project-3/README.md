@@ -42,7 +42,7 @@ erDiagram
 
     AGENTS {
         int id PK
-        string agent_code UNIQUE
+        string agent_code UK
         string name
         string agent_type
         string status
@@ -50,7 +50,7 @@ erDiagram
     }
     TOOLS {
         int id PK
-        string tool_code UNIQUE
+        string tool_code UK
         string name
         string risk_level
     }
@@ -62,7 +62,7 @@ erDiagram
     }
     SECURITY_EVENTS {
         int id PK
-        string event_code UNIQUE
+        string event_code UK
         int agent_id FK
         int tool_id FK
         string category
@@ -71,7 +71,7 @@ erDiagram
     }
     APPROVAL_REQUESTS {
         int id PK
-        string approval_code UNIQUE
+        string approval_code UK
         int agent_id FK
         int tool_id FK
         string status
