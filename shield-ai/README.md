@@ -6,6 +6,21 @@ Full-Stack Implementation (DecodeLabs Projects 1, 2, 3 & 4): Responsive UI front
 
 ---
 
+## 🏛️ Milestone Projects in this Repository
+
+Shield AI was developed across four progressive milestones in the DecodeLabs Full Stack Development curriculum. Each milestone is organized into its own dedicated directory with code and an independent `README.md`:
+
+| Milestone | Project Title | Key Focus & Architecture | Directory Link |
+|---|---|---|---|
+| **Project 1** | **Responsive Frontend Development** | Semantic HTML5, CSS Grid & Flexbox, Mocha Mousse design system, 8 modular UI views, mobile-to-desktop fluid layouts | [📁 `project-1/`](./project-1) |
+| **Project 2** | **Backend API Development & Integration** | Python FastAPI REST gateway, Pydantic v2 schemas, Gatekeeper server-side validation, heuristic injection scanner & PII masking | [📁 `project-2/`](./project-2) |
+| **Project 3** | **Relational Database Integration & Persistence** | SQLAlchemy 2.0 ORM, 6 normalized 3NF tables, Alembic migrations, database constraints, ACID CRUD operations | [📁 `project-3/`](./project-3) |
+| **Project 4** | **Complete Frontend and Backend Integration** | Full-stack asynchronous lifecycle, 5 REST HTTP methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE` 204), centralized `ApiClient`, `AbortController` multiplexing, 77 automated tests, browser CDP verification, and final submission archive | [📁 `project-4/`](./project-4) |
+
+> 📦 **Final Project 4 Deliverable Archive**: [`shield-ai-final.zip`](./shield-ai-final.zip) (also located inside [`project-4/shield-ai-final.zip`](./project-4/shield-ai-final.zip))
+
+---
+
 ## 1. Quick Start Guide (Windows)
 
 ### Prerequisites

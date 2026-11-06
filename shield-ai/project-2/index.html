@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shield AI — AI Agent Security Shield</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+<div class="shell">
+<aside id="side" aria-label="Sidebar navigation" role="navigation">
+  <div class="brand-row">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M16 2 4 7v8c0 8 5 13 12 15 7-2 12-7 12-15V7z" fill="#A47864"/><path d="M16 6 8 9.5V15c0 5.5 3.3 9 8 10.6V6z" fill="#A0D4E0"/></svg>
+      <span>Shield AI</span>
+    </div>
+    <button class="drawer-close" id="drawer-close" aria-label="Close navigation menu">✕</button>
+  </div>
+  <nav aria-label="Primary" id="nav"></nav>
+</aside>
+<div id="overlay" class="drawer-overlay" aria-hidden="true"></div>
+
+<div class="content-wrapper">
+<header class="top">
+  <div class="top-brand-group">
+    <button class="btn alt sm" id="menu" aria-label="Open navigation menu" aria-expanded="false" aria-controls="side">☰ Menu</button>
+    <strong id="pname">Overview</strong>
+  </div>
+  <div class="env-badges">
+    <span class="badge info" title="Demo Environment">DEMO ENVIRONMENT</span>
+    <span class="badge warn" title="Simulation Mode">SIMULATION MODE</span>
+  </div>
+  <button class="btn alt sm" id="bell" aria-label="Notifications">🔔 <span id="bn">0</span></button>
+</header>
+
+<main id="main">
+
+<section id="v-overview">
+  <h1>Security Command Center</h1>
+  <p class="note" style="margin:.4rem 0 .8rem">Monitor AI agent activity, inspect suspicious instructions, and control proposed actions from one centralized security workspace. Real-time security telemetry and audited event figures backed by SQLite.</p>
+  <div class="row">
+    <button class="btn" data-go="scanner">Scan a Prompt</button>
+    <button class="btn alt" data-go="logs">View Threat Activity</button>
+    <button class="btn alt" data-go="sim">Run Attack Simulation</button>
+  </div>
+  <div class="grid g4" id="kpis"></div>
+  <div class="grid g2" style="margin-top:1rem">
+    <article class="card">
+      <h2>Risk distribution</h2>
+      <div id="risk"></div>
+    </article>
+    <article class="card">
+      <h2>Activity timeline</h2>
+      <p class="note" style="margin-bottom:.5rem">Chronological activity distribution (Periods P1–P7)</p>
+      <svg id="chart" viewBox="0 0 280 120" role="img" aria-label="Bar chart of sample security activity" width="100%"></svg>
+    </article>
+  </div>
+  <article class="card" style="margin-top:1rem">
+    <h2>Recent security events</h2>
+    <div class="wrap" tabindex="0" role="region" aria-label="Recent security events table">
+      <table>
+        <thead><tr><th>ID</th><th>Type</th><th>Source</th><th>Risk</th><th>Decision</th><th>Time</th></tr></thead>
+        <tbody id="recent"></tbody>
+      </table>
+    </div>
+  </article>
+  <article class="card" style="margin-top:1rem">
+    <h2>Gateway workflow (9 stages)</h2>
+    <ol class="flow" id="wf9"></ol>
+  </article>
+  <article class="card" style="margin-top:1rem">
+    <h2>Protection modules (configured demo modules)</h2>
+    <div class="row" id="mods"></div>
+  </article>
+</section>
+
+<section id="v-scanner" hidden>
+  <h1>Prompt Scanner</h1>
+  <p class="note" style="margin:.4rem 0 .8rem">Inspect natural-language instructions for prompt injection, jailbreaks, and sensitive data leakage.</p>
+  <div class="grid g2" style="margin-top:.8rem">
+    <article class="card">
+      <label for="pin">Prompt to inspect</label>
+      <textarea id="pin" rows="6" maxlength="1000" placeholder="Enter prompt to analyze for safety..."></textarea>
+      <p class="note"><span id="cc">0</span>/1000 characters · <span id="st" role="status">Ready</span></p>
+      <div class="row">
+        <button class="btn" id="an">Analyze Prompt</button>
+        <button class="btn alt" id="cl">Clear</button>
+      </div>
+      <h3 style="margin-top:.8rem">Example prompts</h3>
+      <div class="row" id="ex"></div>
+      <p class="note" style="margin-top:.8rem">Raw prompts are never stored. Pattern matching is a first-stage heuristic and cannot catch every injection or data leak.</p>
+    </article>
+    <article class="card" id="sres" aria-live="polite">
+      <p class="note">Results appear here.</p>
+    </article>
+  </div>
+</section>
+
+<section id="v-agents" hidden>
+  <h1>Agent Monitor</h1>
+  <p class="note" style="margin:.4rem 0 .8rem">Simulated autonomous agents with active permission bounds and policy telemetry. No real agent is connected.</p>
+  <div class="grid g2" id="ag" style="margin-top:.8rem"></div>
+  <article class="card" style="margin-top:1rem">
+    <h2 id="agt">Select an agent</h2>
+    <ol class="flow" id="agf"></ol>
+  </article>
+</section>
+
+<section id="v-perms" hidden>
+  <h1>Tool Permissions</h1>
+  <p class="note" style="margin:.4rem 0 .8rem">Agents propose; policy decides. Granular least-privilege permissions enforced server-side and persisted in SQLite.</p>
+  <article class="card" style="margin-top:.8rem">
+    <h2>Policy switches</h2>
+    <div id="pol"></div>
+  </article>
+  <article class="card" style="margin-top:.8rem">
+    <h2>Permission matrix</h2>
+    <div class="wrap" tabindex="0" role="region" aria-label="Tool permissions table">
+      <table>
+        <thead><tr><th>Tool</th><th>Description</th><th>Agent</th><th>Risk</th><th>Permission</th></tr></thead>
+        <tbody id="pt"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:.8rem">
+      <button class="btn alt" id="prst">Reset to defaults</button>
+    </div>
+  </article>
+  <article class="card" style="margin-top:1rem">
+    <h3>Least privilege principle</h3>
+    <p class="note">Agents should receive only the permissions necessary to perform their assigned tasks, preventing unauthorized data exfiltration or destructive actions.</p>
+  </article>
+</section>
+
+<section id="v-appr" hidden>
+  <h1>Approval Center</h1>
+  <p class="note" style="margin:.4rem 0 .8rem"><strong>Demo approval center only — no external operations are executed.</strong></p>
+  <article class="card" style="margin-top:.8rem">
+    <h2>Pending and resolved actions</h2>
+    <div class="wrap" tabindex="0" role="region" aria-label="Approval requests table">
+      <table>
+        <thead><tr><th>ID</th><th>Agent</th><th>Operation</th><th>Risk</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="ap"></tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<section id="v-logs" hidden>
+  <h1>Threat Logs</h1>
+  <p class="note" style="margin:.4rem 0 .8rem">Audited security events and intercept records. Seeded records are demonstration data.</p>
+  <article class="card" style="margin-top:.8rem">
+    <div class="grid g4">
+      <div><label for="fq">Search</label><input id="fq" type="search" placeholder="Filter by keyword..."></div>
+      <div><label for="fs">Severity</label><select id="fs"><option value="">All severities</option><option>Low</option><option>Medium</option><option>High</option><option>Critical</option></select></div>
+      <div><label for="fc">Category</label><select id="fc"></select></div>
+      <div><label for="fd">Decision</label><select id="fd"><option value="">All decisions</option><option>Allowed</option><option>Approval required</option><option>Blocked</option></select></div>
+    </div>
+    <div class="row" style="margin-top:.8rem">
+      <button class="btn alt sm" id="fx">Clear filters</button>
+      <span class="note" id="fcnt"></span>
+    </div>
+    <div class="wrap" tabindex="0" role="region" aria-label="Threat logs table">
+      <table>
+        <thead><tr><th>ID</th><th>Time</th><th>Category</th><th>Severity</th><th>Source</th><th>Decision</th></tr></thead>
+        <tbody id="lt"></tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<section id="v-sim" hidden>
+  <h1>Attack Simulator</h1>
+  <p class="note" style="margin:.4rem 0 .8rem">Test policy enforcement against simulated threat vectors. Scenarios are evaluated server-side through FastAPI policy hierarchy.</p>
+  <div class="grid g2" style="margin-top:.8rem">
+    <article class="card">
+      <label for="sc">Scenario</label>
+      <select id="sc"></select>
+      <p id="sd" class="note" style="margin:.5rem 0"></p>
+      <button class="btn" id="run">Run simulation</button>
+      <ol class="flow" id="sf" style="margin-top:.8rem"></ol>
+    </article>
+    <article class="card" id="sr" aria-live="polite">
+      <p class="note">Run a scenario to see the security decision.</p>
+    </article>
+  </div>
+</section>
+
+<section id="v-set" hidden>
+  <h1>Settings</h1>
+  <p class="note" style="margin:.4rem 0 .8rem">Gateway security policy preferences and sensitivity thresholds persisted in the relational database.</p>
+  <article class="card" style="margin-top:.8rem">
+    <label for="sens">Risk sensitivity threshold</label>
+    <select id="sens">
+      <option value="0.8">Low (0.8x multiplier)</option>
+      <option value="1">Balanced (1.0x default)</option>
+      <option value="1.25">High (1.25x strict)</option>
+    </select>
+    <div class="sw"><input type="checkbox" id="ab"><label for="ab">Automatically block critical risk</label></div>
+    <div class="sw"><input type="checkbox" id="ha"><label for="ha">Require human approval for high risk</label></div>
+    <div class="sw"><input type="checkbox" id="mk"><label for="mk">Mask sensitive data in results</label></div>
+    <div class="sw"><input type="checkbox" id="nt"><label for="nt">Show toast notifications</label></div>
+    <div class="row" style="margin-top:1rem">
+      <button class="btn" id="sv">Apply settings</button>
+      <button class="btn alt" id="sr2">Reset to defaults</button>
+      <button class="btn alt" id="clr">Clear demo activity</button>
+    </div>
+  </article>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <button class="btn alt sm" id="top" aria-label="Scroll back to top">↑ Back to top</button>
+  <span>Shield AI is a frontend demonstration. Simulated outcomes are not verified real-world protection.</span>
+</footer>
+</div></div>
+
+<dialog id="dlg" aria-labelledby="dt">
+  <h2 id="dt"></h2>
+  <div id="db"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:1rem">
+    <button class="btn" id="dx">Close</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

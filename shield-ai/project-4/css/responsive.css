@@ -1,0 +1,111 @@
+/* ==========================================================================
+   Shield AI — AI Agent Security Shield (DecodeLabs Project 1)
+   Responsive Breakpoints Stylesheet
+   Mobile-First Strategy:
+     - Default: Mobile (320px – 767px)
+     - Intermediate Mobile / Phablet: 480px
+     - Tablet: 768px – 1023px (DecodeLabs Recommended)
+     - Desktop: 1024px and above (DecodeLabs Recommended)
+     - Large Desktop: 1440px and above
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Phablet & Mobile Landscape (min-width: 480px)
+   -------------------------------------------------------------------------- */
+@media (min-width: 480px) {
+  #kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .row .btn {
+    flex: 0 1 auto;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Tablet Layout (min-width: 768px)
+   -------------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  main {
+    padding: 1.5rem;
+  }
+
+  .g2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .g4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #toast {
+    left: auto;
+    margin: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Desktop Layout (min-width: 1024px)
+   -------------------------------------------------------------------------- */
+@media (min-width: 1024px) {
+  .shell {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  aside {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100dvh;
+    transform: none;
+    box-shadow: none;
+    z-index: 20;
+    border-right: 1px solid #3C2F28;
+    width: 260px;
+  }
+
+  aside.open {
+    transform: none;
+  }
+
+  .drawer-overlay,
+  .drawer-close,
+  #menu {
+    display: none !important;
+  }
+
+  .g4,
+  #kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .g3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #wf9 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Large Desktop / Ultra-Wide Layout (min-width: 1440px)
+   -------------------------------------------------------------------------- */
+@media (min-width: 1440px) {
+  .shell {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  aside {
+    width: 280px;
+  }
+
+  main {
+    max-width: 1440px;
+    padding: 2rem;
+  }
+}
