@@ -260,14 +260,14 @@ python -m pytest backend/tests -v
 
 ---
 
-### Frontend API Client Test Suite (Node.js Test Runner — 12 Tests)
+### Frontend API Client Test Suite (Node.js Test Runner — 17 Tests)
 
 ```powershell
 node --test tests/test_api_client.js
 ```
 
-#### Verified Test Results (12 Passed in ~330ms):
-- **AbortController Multiplexing**:
+#### Verified Test Results (17 Passed in ~440ms):
+- **AbortController Multiplexing & Cancellation**:
   - `External request cancellation before dispatch`: Throws `AbortError` with `isCancelled = true` and `code = "REQUEST_CANCELLED"` — **PASSED**
   - `Internal request timeout triggers correctly`: Throws `TimeoutError` with `isTimeout = true` and `code = "REQUEST_TIMEOUT"` — **PASSED**
   - `External cancellation before timeout occurs`: Accurately reports cancellation, preventing false timeout errors — **PASSED**
@@ -281,6 +281,25 @@ node --test tests/test_api_client.js
   - `Handle genuinely empty response bodies`: Safely returns `null` without misclassifying as malformed JSON — **PASSED**
   - `Support non-JSON plain text responses`: Returns raw text when `Content-Type` is not JSON — **PASSED**
   - `Preserve HTTP status on 500 error`: Retains `status: 500` and error context during JSON parsing failures — **PASSED**
+- **Guaranteed Resource Cleanup (Observable Spies)**:
+  - `Circular JSON serialization failure cleans up timers and listeners`: Guaranteed cleanup in `finally` when `JSON.stringify` throws a circular error — **PASSED**
+  - `Observable spy verification on successful request`: Spies verify `clearTimeout` and `removeEventListener` invocation — **PASSED**
+  - `Observable spy verification on network failure`: Spies verify `clearTimeout` and `removeEventListener` invocation — **PASSED**
+  - `Observable spy verification on intentional cancellation`: Spies verify timer and listener cleanup on abort — **PASSED**
+  - `Observable spy verification on timeout expiration`: Spies verify listener removal on timeout — **PASSED**
+
+---
+
+### Browser Automated End-to-End Verification (Google Chrome CDP)
+
+```powershell
+node scripts/browser_verify.js
+```
+
+#### Verified Browser Execution Results:
+- Connected to real Google Chrome (`Chrome/156.0.8078.80`) via Chrome DevTools Protocol (CDP).
+- **All 8 Modules Tested**: Overview Dashboard, Prompt Scanner, Agent Monitor, Tool Permissions, Approval Center, Threat Logs, Attack Simulator, and Settings.
+- **Console Diagnostics**: **0 Console Errors**, **0 Unhandled Exceptions**, **0 stuck loading indicators**, **0 permanently disabled buttons**.
 
 ---
 

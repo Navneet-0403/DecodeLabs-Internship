@@ -43,41 +43,49 @@ class ApiClient {
     let didTimeout = false;
     let timer = null;
     let onExternalAbort = null;
-
-    if (externalSignal) {
-      onExternalAbort = () => {
-        internalController.abort();
-      };
-      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
-    }
-
-    if (timeout > 0) {
-      timer = setTimeout(() => {
-        didTimeout = true;
-        internalController.abort();
-      }, timeout);
-    }
-
-    const headers = {
-      "Accept": "application/json",
-      ...(options.headers || {})
-    };
-
-    let body = options.body;
-    if (body !== undefined && body !== null && typeof body === "object" && !(body instanceof FormData)) {
-      headers["Content-Type"] = "application/json";
-      body = JSON.stringify(body);
-    }
-
-    const config = {
-      ...options,
-      method,
-      headers,
-      body,
-      signal: internalController.signal
-    };
+    let fetchDispatched = false;
 
     try {
+      if (externalSignal) {
+        onExternalAbort = () => {
+          internalController.abort();
+        };
+        externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+      }
+
+      if (timeout > 0) {
+        timer = setTimeout(() => {
+          didTimeout = true;
+          internalController.abort();
+        }, timeout);
+      }
+
+      const headers = {
+        "Accept": "application/json",
+        ...(options.headers || {})
+      };
+
+      let body = options.body;
+      if (body !== undefined && body !== null && typeof body === "object" && !(body instanceof FormData)) {
+        headers["Content-Type"] = "application/json";
+        try {
+          body = JSON.stringify(body);
+        } catch (serializationErr) {
+          serializationErr.isSerializationError = true;
+          serializationErr.code = "SERIALIZATION_ERROR";
+          throw serializationErr;
+        }
+      }
+
+      const config = {
+        ...options,
+        method,
+        headers,
+        body,
+        signal: internalController.signal
+      };
+
+      fetchDispatched = true;
       const response = await fetch(url, config);
 
       // Handle HTTP 204 No Content or HTTP 205 Reset Content safely
@@ -174,8 +182,8 @@ class ApiClient {
 
       return data;
     } catch (err) {
-      // Re-throw already classified HTTP, Parse, Cancellation, or Timeout errors directly
-      if (err.isHttpError || err.isParseError || err.isCancelled || err.isTimeout) {
+      // Re-throw already classified HTTP, Parse, Cancellation, Timeout, or Serialization errors directly
+      if (err.isHttpError || err.isParseError || err.isCancelled || err.isTimeout || err.isSerializationError) {
         throw err;
       }
 
@@ -202,8 +210,8 @@ class ApiClient {
         throw cancelError;
       }
 
-      // Check network connection failure
-      if (err.name === "TypeError" || String(err.message).toLowerCase().includes("failed to fetch")) {
+      // Check network connection failure (only if fetch was actually dispatched)
+      if (fetchDispatched && (err.name === "TypeError" || String(err.message).toLowerCase().includes("failed to fetch"))) {
         const netError = new Error("Unable to connect to Shield AI backend server. Please verify it is running on http://127.0.0.1:8000.");
         netError.name = "NetworkError";
         netError.isNetworkError = true;
@@ -215,13 +223,14 @@ class ApiClient {
 
       throw err;
     } finally {
-      // Guaranteed resource cleanup in all scenarios (success, error, timeout, cancellation)
+      // Guaranteed resource cleanup in all scenarios (success, error, timeout, cancellation, serialization failure)
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
       if (externalSignal && onExternalAbort) {
         externalSignal.removeEventListener("abort", onExternalAbort);
+        onExternalAbort = null;
       }
     }
   }

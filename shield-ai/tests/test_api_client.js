@@ -350,3 +350,252 @@ test("JSON Handling: Preserve HTTP status information on malformed JSON 500 erro
     globalThis.fetch = originalFetch;
   }
 });
+
+/* --------------------------------------------------------------------------
+   Guaranteed Resource Cleanup & Serialization Failure Regression Tests
+   -------------------------------------------------------------------------- */
+
+test("Cleanup: Circular JSON serialization failure cleans up timers and listeners", async () => {
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalFetch = globalThis.fetch;
+  let clearedTimerId = null;
+  let removeListenerCalled = false;
+  let fetchCalled = false;
+
+  try {
+    globalThis.clearTimeout = (id) => {
+      clearedTimerId = id;
+      return originalClearTimeout(id);
+    };
+
+    globalThis.fetch = async () => {
+      fetchCalled = true;
+      return createMockResponse({ status: 200, body: "{}" });
+    };
+
+    const client = new ApiClient("http://test.local", 10000);
+    const controller = new AbortController();
+
+    const origRemove = controller.signal.removeEventListener;
+    controller.signal.removeEventListener = function(type, listener) {
+      if (type === "abort") removeListenerCalled = true;
+      return origRemove.apply(this, arguments);
+    };
+
+    // Construct circular reference
+    const circularBody = {};
+    circularBody.self = circularBody;
+
+    await assert.rejects(
+      async () => {
+        await client.request("/circular", {
+          method: "POST",
+          body: circularBody,
+          signal: controller.signal,
+          timeout: 10000
+        });
+      },
+      (err) => {
+        assert.ok(err.isSerializationError || err instanceof TypeError);
+        assert.equal(err.code, "SERIALIZATION_ERROR");
+        return true;
+      }
+    );
+
+    // Verify Observable Resource Cleanup:
+    assert.equal(fetchCalled, false, "Fetch must not be dispatched when serialization fails");
+    assert.ok(clearedTimerId !== null, "clearTimeout must be invoked on serialization failure");
+    assert.equal(removeListenerCalled, true, "removeEventListener must be invoked on serialization failure");
+  } finally {
+    globalThis.clearTimeout = originalClearTimeout;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Cleanup: Observable spy verification on successful request", async () => {
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalFetch = globalThis.fetch;
+  let clearedTimerId = null;
+  let removeListenerCalled = false;
+
+  try {
+    globalThis.clearTimeout = (id) => {
+      clearedTimerId = id;
+      return originalClearTimeout(id);
+    };
+
+    globalThis.fetch = async () => {
+      return createMockResponse({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ok: true })
+      });
+    };
+
+    const client = new ApiClient("http://test.local", 5000);
+    const controller = new AbortController();
+
+    const origRemove = controller.signal.removeEventListener;
+    controller.signal.removeEventListener = function(type, listener) {
+      if (type === "abort") removeListenerCalled = true;
+      return origRemove.apply(this, arguments);
+    };
+
+    const res = await client.request("/spy-success", { signal: controller.signal, timeout: 5000 });
+    assert.deepEqual(res, { ok: true });
+
+    assert.ok(clearedTimerId !== null, "Timer must be cleared on success");
+    assert.equal(removeListenerCalled, true, "Abort listener must be removed on success");
+  } finally {
+    globalThis.clearTimeout = originalClearTimeout;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Cleanup: Observable spy verification on network failure", async () => {
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalFetch = globalThis.fetch;
+  let clearedTimerId = null;
+  let removeListenerCalled = false;
+
+  try {
+    globalThis.clearTimeout = (id) => {
+      clearedTimerId = id;
+      return originalClearTimeout(id);
+    };
+
+    globalThis.fetch = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+
+    const client = new ApiClient("http://test.local", 5000);
+    const controller = new AbortController();
+
+    const origRemove = controller.signal.removeEventListener;
+    controller.signal.removeEventListener = function(type, listener) {
+      if (type === "abort") removeListenerCalled = true;
+      return origRemove.apply(this, arguments);
+    };
+
+    await assert.rejects(
+      async () => {
+        await client.request("/spy-fail", { signal: controller.signal, timeout: 5000 });
+      },
+      (err) => {
+        assert.equal(err.isNetworkError, true);
+        return true;
+      }
+    );
+
+    assert.ok(clearedTimerId !== null, "Timer must be cleared on network failure");
+    assert.equal(removeListenerCalled, true, "Abort listener must be removed on network failure");
+  } finally {
+    globalThis.clearTimeout = originalClearTimeout;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Cleanup: Observable spy verification on intentional cancellation", async () => {
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalFetch = globalThis.fetch;
+  let clearedTimerId = null;
+  let removeListenerCalled = false;
+
+  try {
+    globalThis.clearTimeout = (id) => {
+      clearedTimerId = id;
+      return originalClearTimeout(id);
+    };
+
+    globalThis.fetch = (_url, { signal }) => {
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          const err = new Error("Aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    };
+
+    const client = new ApiClient("http://test.local", 5000);
+    const controller = new AbortController();
+
+    const origRemove = controller.signal.removeEventListener;
+    controller.signal.removeEventListener = function(type, listener) {
+      if (type === "abort") removeListenerCalled = true;
+      return origRemove.apply(this, arguments);
+    };
+
+    setTimeout(() => {
+      controller.abort();
+    }, 20);
+
+    await assert.rejects(
+      async () => {
+        await client.request("/spy-cancel", { signal: controller.signal, timeout: 5000 });
+      },
+      (err) => {
+        assert.equal(err.isCancelled, true);
+        assert.equal(err.isTimeout, false);
+        return true;
+      }
+    );
+
+    assert.ok(clearedTimerId !== null, "Timer must be cleared on cancellation");
+    assert.equal(removeListenerCalled, true, "Abort listener must be removed on cancellation");
+  } finally {
+    globalThis.clearTimeout = originalClearTimeout;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("Cleanup: Observable spy verification on timeout expiration", async () => {
+  const originalClearTimeout = globalThis.clearTimeout;
+  const originalFetch = globalThis.fetch;
+  let clearedTimerId = null;
+  let removeListenerCalled = false;
+
+  try {
+    globalThis.clearTimeout = (id) => {
+      clearedTimerId = id;
+      return originalClearTimeout(id);
+    };
+
+    globalThis.fetch = (_url, { signal }) => {
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          const err = new Error("Aborted");
+          err.name = "AbortError";
+          reject(err);
+        });
+      });
+    };
+
+    const client = new ApiClient("http://test.local", 30);
+    const controller = new AbortController();
+
+    const origRemove = controller.signal.removeEventListener;
+    controller.signal.removeEventListener = function(type, listener) {
+      if (type === "abort") removeListenerCalled = true;
+      return origRemove.apply(this, arguments);
+    };
+
+    await assert.rejects(
+      async () => {
+        await client.request("/spy-timeout", { signal: controller.signal, timeout: 30 });
+      },
+      (err) => {
+        assert.equal(err.isTimeout, true);
+        assert.equal(err.isCancelled, false);
+        return true;
+      }
+    );
+
+    assert.ok(clearedTimerId !== null, "Timer must be cleared in finally on timeout");
+    assert.equal(removeListenerCalled, true, "Abort listener must be removed on timeout");
+  } finally {
+    globalThis.clearTimeout = originalClearTimeout;
+    globalThis.fetch = originalFetch;
+  }
+});
+
