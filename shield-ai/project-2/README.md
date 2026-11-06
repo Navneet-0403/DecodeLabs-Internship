@@ -84,3 +84,4 @@ uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 - Application UI: [http://127.0.0.1:8000](http://127.0.0.1:8000)
 - Interactive Swagger UI: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - ReDoc Documentation: [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
+

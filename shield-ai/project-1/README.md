@@ -65,3 +65,4 @@ Since Project 1 is a pure frontend implementation:
    python -m http.server 8000
    ```
 3. Open `http://localhost:8000` in Chrome, Firefox, Safari, or Edge.
+

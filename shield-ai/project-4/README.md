@@ -96,3 +96,4 @@ uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 # 4. Open in browser
 # Navigate to http://127.0.0.1:8000
 ```
+
