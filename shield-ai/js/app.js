@@ -618,7 +618,7 @@ async function loadLogs() {
 
     fillCategoriesDropdown();
   } catch (err) {
-    if (err.name === "AbortError") return; // Ignored intentionally on debounced cancellation
+    if (err.name === "AbortError" || err.isCancelled || err.code === "REQUEST_CANCELLED") return; // Ignored intentionally on debounced cancellation
     console.error("Threat logs query error:", err);
     if (ltEl) {
       ltEl.innerHTML = `<tr><td colspan="6" class="table-loading bad">Query error: ${esc(err.message)}</td></tr>`;

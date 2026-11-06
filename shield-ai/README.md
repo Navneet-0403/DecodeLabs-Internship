@@ -71,44 +71,62 @@ DecodeLabs Project 4 establishes the complete, production-ready integration brid
 
 ### Core Full-Stack Integration Features
 
-1. **Centralized Fetch API Client (`js/api.js`)**:
+1. **Centralized REST API Client (`js/api.js`)**:
    - Single point of HTTP communication using clean `async`/`await` patterns.
-   - Built-in `AbortController` timeout (15s default) guarding against hung network connections.
+   - Complete support for all five REST HTTP methods: `GET`, `POST`, `PUT`, `PATCH`, and `DELETE`.
+   - Advanced `AbortController` multiplexing:
+     - Distinguishes intentional user cancellation (`isCancelled = true`, `code = "REQUEST_CANCELLED"`, `name = "AbortError"`) from internal timeout (`isTimeout = true`, `code = "REQUEST_TIMEOUT"`, `name = "TimeoutError"`).
+     - Combines external cancellation signals (e.g. debounced search inputs) with internal timeouts without relying on non-universal APIs like `AbortSignal.any()` or `AbortSignal.timeout()`.
+     - Guaranteed resource cleanup: timeout timers and external abort listeners are cleared in all cases (`finally` block) after success, network error, timeout, or cancellation to avoid memory leaks.
+   - Predictable JSON Response Parsing:
+     - Automatically parses valid JSON responses.
+     - Detects malformed JSON when the server declares a JSON response through `Content-Type: application/json` or `+json`, throwing a meaningful `MALFORMED_JSON` syntax error while preserving the HTTP status code and server context.
+     - Safely handles `HTTP 204 No Content` and genuinely empty response bodies, returning `null` without throwing false JSON syntax errors.
+     - Preserves legitimate non-JSON plain text responses where appropriate.
    - Automatic JSON serialization and header management (`Accept: application/json`, `Content-Type: application/json`).
-   - Safe parsing handling HTTP 204 No Content without attempting JSON deserialization.
-   - Accurate content-type inspection before response parsing.
 
-2. **Comprehensive HTTP Status Code Handling**:
+2. **Complete REST HTTP Method Support**:
+   | HTTP Method | Operation Type | Implemented Endpoints & Behavior |
+   |---|---|---|
+   | **GET** | Retrieve | `/api/dashboard`, `/api/agents`, `/api/tools`, `/api/approvals`, `/api/events`, `/api/settings`, `/api/health` |
+   | **POST** | Create / Action | `/api/scans` (heuristic scan), `/api/simulations` (multi-stage attack), `/api/approvals/{id}/decision`, `/api/demo/reset`, `/api/tools/reset` |
+   | **PUT** | Replace / Update | `/api/tools/{id}` (full tool permission update), `/api/settings` (complete settings replacement) |
+   | **PATCH** | Partial Update | `/api/settings` (partial settings update), `/api/tools/{id}` (partial permission status), `/api/agents/{id}` (partial agent update), `/api/approvals/{id}` (partial approval update) |
+   | **DELETE** | Remove | `/api/events/{id}/purge` (permanently purges event record, returns **HTTP 204 No Content** with empty body) |
+
+3. **Comprehensive HTTP Status Code Handling**:
    | Status Code | Classification | Frontend Handling |
    |---|---|---|
    | **200 OK** | Success | Parses payload and dynamically renders view |
    | **201 Created** | Resource Created | Renders created entity & triggers background counter update |
-   | **204 No Content** | Empty Success | Handles success cleanly without JSON parsing |
-   | **400 Bad Request** | Gatekeeper Error | Displays user-friendly validation explanation |
+   | **204 No Content** | Empty Success | Handles success cleanly with empty body (returns `null` without JSON parsing) |
+   | **400 Bad Request** | Gatekeeper Error | Displays user-friendly validation explanation (`INVALID_INPUT`) |
    | **401 Unauthorized** | Auth Failure | Prompts for credentials where required |
    | **403 Forbidden** | Policy Denied | Explains permission denial |
-   | **404 Not Found** | Missing Entity | Displays descriptive not-found notice |
-   | **409 Conflict** | State Conflict | Alerts user that entity (e.g. approval) was already resolved |
+   | **404 Not Found** | Missing Entity | Displays descriptive not-found notice (`TOOL_NOT_FOUND`, `EVENT_NOT_FOUND`, etc.) |
+   | **409 Conflict** | State Conflict | Alerts user that entity (e.g. approval) was already resolved (`APPROVAL_ALREADY_DECIDED`) |
    | **422 Unprocessable** | Pydantic Error | Formats field-level schema validation errors |
    | **429 Rate Limited** | Throttling | Warns user to pause before submitting more requests |
-   | **500 Server Error** | Internal Failure | Sanitized message shown; internal trace never exposed |
+   | **500 Server Error** | Internal Failure | Sanitized message shown; internal trace never exposed to user |
    | **502 / 503 / 504** | Gateway Offline | Warns that backend server is unreachable with retry option |
 
-3. **Asynchronous Best Practices**:
+4. **Asynchronous Best Practices & Guaranteed UI Cleanup**:
    - Parallel initial data hydration via `Promise.allSettled([loadSettings(), loadTools(), loadAgents(), loadApprovals(), loadLogs(), loadDashboard()])`.
-   - Debounced threat log search (300ms) with `AbortController` signal cancellation to abort obsolete in-flight requests when users type rapidly.
+   - Debounced threat log search (300ms) with `AbortController` cancellation to abort obsolete in-flight requests without generating false timeout alerts.
+   - Guaranteed `finally` cleanup: All asynchronous actions (`runSim()`, `scan()`, `updateToolPermission()`, `decideApprovalAction()`, `applySettings()`, `resetDemoActivity()`) re-enable action buttons and dismiss indicators inside `finally` blocks.
    - Reactive cross-module refreshes: scans, approvals, permission changes, and simulations automatically update the Dashboard KPIs, Activity timeline, and Threat logs.
 
-4. **Defensive UI States & Safe Rendering**:
+5. **Defensive UI States & Safe Rendering**:
    - **Loading State**: Visual loading indicators and button disablers during in-flight mutations.
    - **Success State**: Verified server responses rendered with color-coded risk/decision pills (`ok`, `warn`, `bad`).
    - **Empty State**: Clear explanatory messages when filter criteria yield 0 records.
    - **Error State**: Non-blocking toast notifications and inline retry banners.
    - **Safe DOM Rendering**: All user and backend strings pass through `esc()` to prevent DOM-based XSS vulnerabilities.
 
-5. **CORS & Origin Security**:
+6. **CORS & Origin Security**:
    - Same-origin deployment: Frontend assets (`/css`, `/js`, `/assets`, `index.html`) served directly by FastAPI.
-   - Cross-origin development supported via `CORSMiddleware` configured for standard development ports (`:3000`, `:5500`, `:8000`, `:8080`, `:5173`), handling preflight `OPTIONS` requests and returning `Access-Control-Allow-Origin` headers.
+   - Cross-origin development supported via `CORSMiddleware` configured for standard development ports (`:3000`, `:5500`, `:8000`, `:8080`, `:5173`).
+   - Preflight `OPTIONS` requests supported with allowed methods `["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]` and allowed headers.
 
 ---
 
@@ -216,14 +234,16 @@ erDiagram
 
 ## 5. Automated Testing Verification
 
-Run the complete automated test suite (57 tests):
+The project is backed by two automated regression test suites covering both the Python FastAPI backend and the client-side JavaScript API client.
+
+### Backend Automated Test Suite (Pytest — 60 Tests)
 
 ```powershell
 python -m pytest backend/tests -v
 ```
 
-### Verified Test Results (57 Passed in 4.43s):
-- **Full-Stack Integration**: `test_fullstack_integration.py` (CORS headers & preflight OPTIONS, 8-module end-to-end flow, Gatekeeper error status codes) — **3 PASSED**
+#### Verified Test Results (60 Passed in ~6.5s):
+- **Full-Stack Integration**: `test_fullstack_integration.py` (CORS headers & preflight OPTIONS for PATCH, 8-module end-to-end flow, Gatekeeper error status codes, 5 REST HTTP methods [GET, POST, PUT, PATCH, DELETE], HTTP 204 No Content empty responses, and malformed JSON payloads) — **6 PASSED**
 - **Alembic Migrations**: `test_migrations.py` (Fresh DB creation, rollback & re-upgrade, Project 2 data preservation, DB constraints) — **4 PASSED**
 - **Model Constraints & Foreign Keys**: `test_models_and_schema.py` (CHECK constraint enforcement, foreign key referential integrity, UNIQUE constraints) — **5 PASSED**
 - **Complete CRUD Operations**: `test_crud_operations.py` (Full CRUD across Agents, Tools, AgentTools, Events, Approvals) — **5 PASSED**
@@ -240,6 +260,30 @@ python -m pytest backend/tests -v
 
 ---
 
+### Frontend API Client Test Suite (Node.js Test Runner — 12 Tests)
+
+```powershell
+node --test tests/test_api_client.js
+```
+
+#### Verified Test Results (12 Passed in ~330ms):
+- **AbortController Multiplexing**:
+  - `External request cancellation before dispatch`: Throws `AbortError` with `isCancelled = true` and `code = "REQUEST_CANCELLED"` — **PASSED**
+  - `Internal request timeout triggers correctly`: Throws `TimeoutError` with `isTimeout = true` and `code = "REQUEST_TIMEOUT"` — **PASSED**
+  - `External cancellation before timeout occurs`: Accurately reports cancellation, preventing false timeout errors — **PASSED**
+  - `Timeout while external signal is supplied`: Enforces timeout even when an external signal is attached — **PASSED**
+  - `Cleanup on success`: Clears timers and removes external abort listeners in `finally` — **PASSED**
+  - `Cleanup on network failure`: Cleans up resources without memory leaks on network failures — **PASSED**
+- **JSON & Response Handling**:
+  - `Parse valid JSON response`: Successfully parses valid server payloads — **PASSED**
+  - `Detect malformed JSON on application/json`: Explicitly raises `SyntaxError` (`MALFORMED_JSON`) while preserving HTTP status — **PASSED**
+  - `Handle HTTP 204 No Content`: Cleanly returns `null` without throwing unexpected JSON EOF errors — **PASSED**
+  - `Handle genuinely empty response bodies`: Safely returns `null` without misclassifying as malformed JSON — **PASSED**
+  - `Support non-JSON plain text responses`: Returns raw text when `Content-Type` is not JSON — **PASSED**
+  - `Preserve HTTP status on 500 error`: Retains `status: 500` and error context during JSON parsing failures — **PASSED**
+
+---
+
 ## 6. Project Directory Structure
 
 ```
@@ -249,8 +293,10 @@ shield-ai/
 │   ├── style.css               # Mobile-first design system, design tokens, interactive states
 │   └── responsive.css          # Fluid layout breakpoints (320px to 1440px+)
 ├── js/
-│   ├── api.js                  # Centralized Fetch API client (timeouts, errors, CORS, status codes)
+│   ├── api.js                  # Centralized REST API client (5 verbs, AbortController, JSON validation)
 │   └── app.js                  # Asynchronous UI controller, DOM manipulation, state management
+├── tests/
+│   └── test_api_client.js      # Frontend API Client regression tests (AbortController & JSON parsing)
 ├── data/
 │   └── shield_ai.db            # Persistent SQLite database (normalized 3NF)
 ├── alembic.ini                 # Alembic migration configuration
@@ -269,9 +315,9 @@ shield-ai/
 │   │   ├── models/             # SQLAlchemy ORM Relational Models (6 tables)
 │   │   ├── schemas/            # Pydantic Validation & Serialization Schemas
 │   │   ├── repositories/       # SQLAlchemy 2.0 Data Access Repositories
-│   │   ├── routes/             # REST API Route Controllers
+│   │   ├── routes/             # REST API Route Controllers (GET, POST, PUT, PATCH, DELETE)
 │   │   └── services/           # Heuristic security & policy evaluation engines
-│   └── tests/                  # Pytest Automated Test Suite (57 Tests)
+│   └── tests/                  # Pytest Automated Test Suite (60 Tests)
 │       ├── conftest.py
 │       ├── test_fullstack_integration.py # Project 4 complete integration tests
 │       ├── test_migrations.py            # Alembic schema & preservation tests

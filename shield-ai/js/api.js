@@ -23,17 +23,38 @@ class ApiClient {
     const url = `${this.baseUrl}${endpoint}`;
     const method = (options.method || "GET").toUpperCase();
     const timeout = options.timeout ?? this.defaultTimeout;
+    const externalSignal = options.signal;
 
-    // Manage request timeout with AbortController if no external signal is supplied
-    let controller = null;
-    let signal = options.signal;
+    // Fast-path: if external signal was already aborted before dispatch
+    if (externalSignal && externalSignal.aborted) {
+      const cancelError = new Error("Request was cancelled.");
+      cancelError.name = "AbortError";
+      cancelError.isCancelled = true;
+      cancelError.isTimeout = false;
+      cancelError.code = "REQUEST_CANCELLED";
+      if (externalSignal.reason !== undefined) {
+        cancelError.reason = externalSignal.reason;
+      }
+      throw cancelError;
+    }
+
+    // Set up internal AbortController to multiplex external signal and internal timeout
+    const internalController = new AbortController();
+    let didTimeout = false;
     let timer = null;
+    let onExternalAbort = null;
 
-    if (!signal && timeout > 0) {
-      controller = new AbortController();
-      signal = controller.signal;
+    if (externalSignal) {
+      onExternalAbort = () => {
+        internalController.abort();
+      };
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+
+    if (timeout > 0) {
       timer = setTimeout(() => {
-        controller.abort();
+        didTimeout = true;
+        internalController.abort();
       }, timeout);
     }
 
@@ -53,7 +74,7 @@ class ApiClient {
       method,
       headers,
       body,
-      signal
+      signal: internalController.signal
     };
 
     try {
@@ -64,22 +85,38 @@ class ApiClient {
         return null;
       }
 
-      // Safe body reading: handles empty bodies without throwing unexpected JSON EOF errors
+      // Safe body reading & explicit Content-Type validation
       const contentType = response.headers.get("content-type") || "";
-      const isJson = contentType.includes("application/json");
-      let data = null;
+      const isJson = contentType.includes("application/json") || contentType.includes("+json");
 
       const rawText = await response.text();
-      if (rawText && rawText.trim()) {
+      const hasBody = rawText !== null && rawText !== undefined && rawText.trim().length > 0;
+
+      let data = null;
+      if (hasBody) {
         if (isJson) {
           try {
             data = JSON.parse(rawText);
           } catch (jsonErr) {
-            data = rawText;
+            // Explicit error when server declares application/json but returns malformed content
+            const parseError = new Error(`Malformed JSON response from server (HTTP ${response.status}).`);
+            parseError.name = "SyntaxError";
+            parseError.status = response.status;
+            parseError.statusText = response.statusText;
+            parseError.code = "MALFORMED_JSON";
+            parseError.isParseError = true;
+            parseError.isClientError = response.status >= 400 && response.status < 500;
+            parseError.isServerError = response.status >= 500;
+            parseError.bodyPreview = rawText.length > 200 ? rawText.substring(0, 200) + "…" : rawText;
+            throw parseError;
           }
         } else {
+          // Legitimate non-JSON response (text/plain, csv, etc.)
           data = rawText;
         }
+      } else {
+        // Genuinely empty body (not malformed JSON)
+        data = null;
       }
 
       // Inspect response.ok to discriminate HTTP status codes
@@ -123,6 +160,7 @@ class ApiClient {
         }
 
         const httpError = new Error(errorMessage);
+        httpError.name = "HttpError";
         httpError.status = response.status;
         httpError.statusText = response.statusText;
         httpError.code = errorCode;
@@ -136,30 +174,54 @@ class ApiClient {
 
       return data;
     } catch (err) {
-      if (err.isHttpError) {
+      // Re-throw already classified HTTP, Parse, Cancellation, or Timeout errors directly
+      if (err.isHttpError || err.isParseError || err.isCancelled || err.isTimeout) {
         throw err;
       }
 
-      // Check request timeout
-      if (err.name === "AbortError") {
+      // Check if abort was caused by timeout
+      if (didTimeout || err.name === "TimeoutError") {
         const timeoutError = new Error(`Request timed out after ${timeout}ms. Please verify backend responsiveness.`);
+        timeoutError.name = "TimeoutError";
         timeoutError.isTimeout = true;
+        timeoutError.isCancelled = false;
         timeoutError.code = "REQUEST_TIMEOUT";
         throw timeoutError;
+      }
+
+      // Check if abort was caused by intentional cancellation
+      if (err.name === "AbortError" || (externalSignal && externalSignal.aborted)) {
+        const cancelError = new Error("Request was cancelled.");
+        cancelError.name = "AbortError";
+        cancelError.isCancelled = true;
+        cancelError.isTimeout = false;
+        cancelError.code = "REQUEST_CANCELLED";
+        if (externalSignal && externalSignal.reason !== undefined) {
+          cancelError.reason = externalSignal.reason;
+        }
+        throw cancelError;
       }
 
       // Check network connection failure
       if (err.name === "TypeError" || String(err.message).toLowerCase().includes("failed to fetch")) {
         const netError = new Error("Unable to connect to Shield AI backend server. Please verify it is running on http://127.0.0.1:8000.");
+        netError.name = "NetworkError";
         netError.isNetworkError = true;
+        netError.isCancelled = false;
+        netError.isTimeout = false;
         netError.code = "NETWORK_UNAVAILABLE";
         throw netError;
       }
 
       throw err;
     } finally {
+      // Guaranteed resource cleanup in all scenarios (success, error, timeout, cancellation)
       if (timer) {
         clearTimeout(timer);
+        timer = null;
+      }
+      if (externalSignal && onExternalAbort) {
+        externalSignal.removeEventListener("abort", onExternalAbort);
       }
     }
   }
@@ -351,6 +413,12 @@ class ApiClient {
   }
 }
 
-// Global Singleton Export
+// Global Singleton Export & Module Compatibility
 const API = new ApiClient();
-window.API = API;
+if (typeof window !== "undefined") {
+  window.API = API;
+  window.ApiClient = ApiClient;
+}
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { ApiClient, API };
+}
